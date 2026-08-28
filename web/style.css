@@ -1,14 +1,480 @@
-/* Заголовки модальных окон */
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    -webkit-tap-highlight-color: transparent;
+}
+
+:root {
+    --bg: #09090d;
+    --card: #111117;
+    --card-light: #17171f;
+    --purple: #8b5cf6;
+    --purple-light: #a78bfa;
+    --text: #ffffff;
+    --muted: #8f8f9d;
+    --border: rgba(255, 255, 255, 0.07);
+}
+
+html,
+body {
+    width: 100%;
+    min-height: 100%;
+    background: var(--bg);
+    color: var(--text);
+    font-family:
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        sans-serif;
+}
+
+body {
+    overflow-x: hidden;
+}
+
+button {
+    border: 0;
+    outline: none;
+    color: inherit;
+    font-family: inherit;
+    cursor: pointer;
+}
+
+.app {
+    width: 100%;
+    max-width: 520px;
+    min-height: 100vh;
+    margin: auto;
+    padding: 20px 16px 100px;
+    position: relative;
+}
+
+/* ФОН */
+
+.app::before {
+    content: "";
+    position: fixed;
+    width: 260px;
+    height: 260px;
+    top: -100px;
+    right: -100px;
+    background: var(--purple);
+    opacity: 0.12;
+    filter: blur(90px);
+    border-radius: 50%;
+    pointer-events: none;
+}
+
+.app::after {
+    content: "";
+    position: fixed;
+    width: 220px;
+    height: 220px;
+    bottom: 50px;
+    left: -120px;
+    background: #6d28d9;
+    opacity: 0.08;
+    filter: blur(90px);
+    border-radius: 50%;
+    pointer-events: none;
+}
+
+/* ВЕРХ */
+
+.top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+}
+
+.logo {
+    font-size: 27px;
+    font-weight: 800;
+    letter-spacing: -1px;
+}
+
+.subtitle {
+    margin-top: 3px;
+    color: var(--muted);
+    font-size: 12px;
+}
+
+.avatar {
+    width: 45px;
+    height: 45px;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    border-radius: 50%;
+
+    background:
+        linear-gradient(
+            145deg,
+            #8b5cf6,
+            #4c1d95
+        );
+
+    box-shadow:
+        0 0 25px rgba(139, 92, 246, 0.25);
+
+    font-size: 20px;
+}
+
+/* БАЛАНС */
+
+.balance-card {
+    position: relative;
+    overflow: hidden;
+
+    padding: 25px;
+
+    border-radius: 25px;
+
+    background:
+        linear-gradient(
+            145deg,
+            #191522,
+            #101014
+        );
+
+    border: 1px solid rgba(167, 139, 250, 0.15);
+
+    box-shadow:
+        0 20px 50px rgba(0, 0, 0, 0.35);
+}
+
+.balance-card::before {
+    content: "";
+    position: absolute;
+
+    width: 180px;
+    height: 180px;
+
+    right: -70px;
+    top: -70px;
+
+    background: var(--purple);
+    opacity: 0.18;
+
+    filter: blur(55px);
+
+    border-radius: 50%;
+}
+
+.balance-title {
+    position: relative;
+    color: var(--muted);
+    font-size: 13px;
+}
+
+.balance {
+    position: relative;
+
+    margin-top: 8px;
+
+    font-size: 39px;
+    font-weight: 800;
+
+    letter-spacing: -1px;
+}
+
+.balance-label {
+    position: relative;
+
+    margin-top: 5px;
+
+    color: var(--muted);
+    font-size: 12px;
+}
+
+/* СЕТКА */
+
+.grid {
+    display: grid;
+
+    grid-template-columns: 1fr 1fr;
+
+    gap: 12px;
+
+    margin-top: 14px;
+}
+
+.grid button {
+    min-height: 125px;
+
+    padding: 17px;
+
+    text-align: left;
+
+    border-radius: 20px;
+
+    background: var(--card);
+
+    border: 1px solid var(--border);
+
+    transition:
+        transform 0.15s ease,
+        background 0.15s ease;
+}
+
+.grid button:active {
+    transform: scale(0.97);
+}
+
+.grid button span {
+    display: block;
+
+    font-size: 25px;
+
+    margin-bottom: 17px;
+}
+
+.grid button b {
+    display: block;
+
+    font-size: 14px;
+}
+
+.grid button small {
+    display: block;
+
+    margin-top: 4px;
+
+    color: var(--muted);
+
+    font-size: 11px;
+}
+
+/* БОЛЬШИЕ КАРТОЧКИ */
+
+.wide-card {
+    display: flex;
+    align-items: center;
+
+    gap: 13px;
+
+    min-height: 70px;
+
+    margin-top: 12px;
+
+    padding: 13px;
+
+    border-radius: 19px;
+
+    background: var(--card);
+
+    border: 1px solid var(--border);
+
+    transition:
+        transform 0.15s ease;
+}
+
+.wide-card:active {
+    transform: scale(0.985);
+}
+
+.wide-icon {
+    width: 44px;
+    height: 44px;
+
+    flex-shrink: 0;
+
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    border-radius: 14px;
+
+    background: var(--card-light);
+
+    font-size: 20px;
+}
+
+.wide-card b {
+    font-size: 14px;
+}
+
+.wide-card p {
+    margin-top: 3px;
+
+    color: var(--muted);
+
+    font-size: 11px;
+}
+
+.arrow {
+    margin-left: auto;
+
+    color: #6f6f7d;
+
+    font-size: 25px;
+}
+
+/* НИЖНЯЯ НАВИГАЦИЯ */
+
+.bottom-nav {
+    position: fixed;
+
+    z-index: 20;
+
+    bottom: 12px;
+    left: 50%;
+
+    transform: translateX(-50%);
+
+    width: calc(100% - 28px);
+    max-width: 490px;
+
+    height: 67px;
+
+    display: grid;
+
+    grid-template-columns:
+        repeat(4, 1fr);
+
+    padding: 7px;
+
+    border-radius: 22px;
+
+    background:
+        rgba(17, 17, 23, 0.92);
+
+    border: 1px solid var(--border);
+
+    backdrop-filter: blur(20px);
+
+    box-shadow:
+        0 15px 40px rgba(0, 0, 0, 0.45);
+}
+
+.bottom-nav button {
+    background: transparent;
+
+    border-radius: 16px;
+
+    color: var(--muted);
+
+    transition: 0.2s;
+}
+
+.bottom-nav button:active {
+    background:
+        rgba(139, 92, 246, 0.12);
+}
+
+.bottom-nav span {
+    display: block;
+
+    font-size: 18px;
+}
+
+.bottom-nav small {
+    display: block;
+
+    margin-top: 3px;
+
+    font-size: 9px;
+}
+
+/* МОДАЛЬНОЕ ОКНО */
+
+.modal {
+    position: fixed;
+
+    z-index: 100;
+
+    inset: 0;
+
+    display: flex;
+
+    align-items: flex-end;
+    justify-content: center;
+
+    padding: 14px;
+
+    background:
+        rgba(0, 0, 0, 0.65);
+
+    backdrop-filter: blur(7px);
+}
+
+.modal.hidden {
+    display: none;
+}
+
+.modal-box {
+    width: 100%;
+    max-width: 500px;
+
+    min-height: 180px;
+
+    padding: 24px;
+
+    position: relative;
+
+    border-radius: 27px;
+
+    background: #111117;
+
+    border: 1px solid var(--border);
+
+    box-shadow:
+        0 -10px 50px rgba(0, 0, 0, 0.45);
+
+    animation:
+        modalIn 0.2s ease;
+}
+
+@keyframes modalIn {
+
+    from {
+        opacity: 0;
+        transform: translateY(25px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.close {
+    position: absolute;
+
+    right: 17px;
+    top: 14px;
+
+    width: 32px;
+    height: 32px;
+
+    border-radius: 50%;
+
+    background: var(--card-light);
+
+    color: var(--muted);
+
+    font-size: 20px;
+}
+
+/* ЗАГОЛОВКИ */
 
 .modal-box h2 {
     font-size: 23px;
+
     font-weight: 800;
+
     letter-spacing: -0.5px;
 }
 
 .modal-box p {
     color: var(--muted);
+
     font-size: 14px;
+
     line-height: 1.6;
 }
 
@@ -16,26 +482,33 @@
     color: var(--text);
 }
 
-/* Кнопки действий */
+/* КНОПКИ */
 
 .action-button {
     width: 100%;
+
     min-height: 52px;
+
     padding: 14px 18px;
+
     border-radius: 16px;
 
-    background: linear-gradient(
-        135deg,
-        #8b5cf6,
-        #6d28d9
-    );
+    background:
+        linear-gradient(
+            135deg,
+            #8b5cf6,
+            #6d28d9
+        );
 
     color: white;
+
     font-size: 14px;
+
     font-weight: 700;
 
     box-shadow:
-        0 8px 25px rgba(139, 92, 246, 0.22);
+        0 8px 25px
+        rgba(139, 92, 246, 0.22);
 
     transition:
         transform 0.15s ease,
@@ -44,24 +517,29 @@
 
 .action-button:active {
     transform: scale(0.97);
+
     opacity: 0.85;
 }
 
-/* Поля ввода */
+/* ПОЛЯ */
 
 .input {
     width: 100%;
+
     height: 52px;
 
     padding: 0 16px;
 
     border: 1px solid var(--border);
+
     border-radius: 16px;
 
     background: var(--card-light);
+
     color: var(--text);
 
     font-size: 15px;
+
     outline: none;
 }
 
@@ -70,19 +548,86 @@
 }
 
 .input:focus {
-    border-color: rgba(139, 92, 246, 0.5);
+    border-color:
+        rgba(139, 92, 246, 0.5);
 }
 
-/* Награды рулетки */
+/* РУЛЕТКА */
 
 .roulette-rewards {
     padding: 16px;
+
     border-radius: 17px;
 
     background: var(--card-light);
+
     border: 1px solid var(--border);
 
     color: var(--text);
+
     font-size: 14px;
+
     line-height: 2;
+}
+
+/* ЛИДЕРЫ */
+
+.leader {
+    display: flex;
+
+    align-items: center;
+
+    gap: 10px;
+
+    min-height: 55px;
+
+    margin-bottom: 9px;
+
+    padding: 10px 13px;
+
+    border-radius: 15px;
+
+    background: var(--card-light);
+
+    border: 1px solid var(--border);
+}
+
+.leader > span:first-child {
+    width: 28px;
+
+    font-size: 19px;
+}
+
+.leader b {
+    flex: 1;
+
+    font-size: 13px;
+}
+
+.leader > span:last-child {
+    color: var(--muted);
+
+    font-size: 12px;
+}
+
+/* МОБИЛЬНЫЕ */
+
+@media (max-width: 360px) {
+
+    .app {
+        padding-left: 12px;
+        padding-right: 12px;
+    }
+
+    .balance {
+        font-size: 34px;
+    }
+
+    .grid {
+        gap: 9px;
+    }
+
+    .grid button {
+        min-height: 115px;
+    }
 }
