@@ -6,6 +6,7 @@ from aiogram import Bot, Dispatcher, F
 from aiogram.filters import CommandStart
 from aiogram.types import (
     Message,
+    CallbackQuery,
     InlineKeyboardMarkup,
     InlineKeyboardButton,
     WebAppInfo,
@@ -15,7 +16,7 @@ from database import (
     init_db,
     create_user,
     get_user,
-    add_balance,
+    process_referral,
 )
 
 
@@ -46,10 +47,6 @@ logging.basicConfig(
     level=logging.INFO
 )
 
-bot = Bot(
-    token=BOT_TOKEN
-)
-
 dp = Dispatcher()
 
 
@@ -59,31 +56,53 @@ dp = Dispatcher()
 
 def main_keyboard():
 
-    buttons = [
-        [
-            InlineKeyboardButton(
-                text="🚀 Открыть GiftsEz",
-                web_app=WebAppInfo(
-                    url=WEBAPP_URL
+    return InlineKeyboardMarkup(
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="🚀 Открыть GiftsEz",
+                    web_app=WebAppInfo(
+                        url=WEBAPP_URL
+                    )
                 )
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                text="📢 Наш канал",
-                url=f"https://t.me/{CHANNEL.lstrip('@')}"
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                text="💬 Поддержка",
-                url=f"https://t.me/{SUPPORT_USERNAME}"
-            )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="📢 Наш канал",
+                    url=f"https://t.me/{CHANNEL.lstrip('@')}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="💬 Поддержка",
+                    url=f"https://t.me/{SUPPORT_USERNAME}"
+                )
+            ]
         ]
-    ]
+    )
+
+
+# =========================
+# КЛАВИАТУРА ПОДПИСКИ
+# =========================
+
+def subscription_keyboard():
 
     return InlineKeyboardMarkup(
-        inline_keyboard=buttons
+        inline_keyboard=[
+            [
+                InlineKeyboardButton(
+                    text="📢 Подписаться",
+                    url=f"https://t.me/{CHANNEL.lstrip('@')}"
+                )
+            ],
+            [
+                InlineKeyboardButton(
+                    text="✅ Проверить подписку",
+                    callback_data="check_sub"
+                )
+            ]
+        ]
     )
 
 
@@ -128,80 +147,75 @@ async def start_handler(message: Message):
     if not user:
         return
 
-    # Реферальный параметр
-    args = message.text.split(maxsplit=1)
-
     invited_by = None
+
+    # Получаем /start ref_ID
+    args = message.text.split(
+        maxsplit=1
+    )
 
     if len(args) > 1:
 
-        payload = args[1]
+        payload = args[1].strip()
 
         if payload.startswith("ref_"):
 
             try:
 
                 invited_by = int(
-                    payload.replace(
-                        "ref_",
-                        "",
-                        1
-                    )
+                    payload[4:]
                 )
 
             except ValueError:
+
                 invited_by = None
 
-    # Нельзя пригласить самого себя
+    # Сам себя приглашать нельзя
     if invited_by == user.id:
         invited_by = None
 
+    # Проверяем существующего пользователя
     existing = get_user(
         user.id
     )
 
+    # Новый пользователь
     if not existing:
 
+        # Сначала создаём пользователя
+        # с балансом 0 ⭐
         create_user(
             user_id=user.id,
             username=user.username,
-            first_name=user.first_name,
-            invited_by=invited_by
+            first_name=user.first_name
         )
 
-        # Начисляем рефереру только
-        # при первой регистрации пользователя
+        # Затем безопасно обрабатываем
+        # реферала и +0.85 ⭐
         if invited_by:
 
-            inviter = get_user(
-                invited_by
-            )
+            try:
 
-            if inviter:
-
-                add_balance(
-                    invited_by,
-                    0.85
+                rewarded = process_referral(
+                    inviter_id=invited_by,
+                    invited_user_id=user.id,
+                    reward=0.85
                 )
 
-                # Обновляем количество рефералов
-                from database import get_connection
+                if rewarded:
 
-                conn = get_connection()
-                cur = conn.cursor()
+                    logging.info(
+                        "Реферал: %s пригласил %s, +0.85 ⭐",
+                        invited_by,
+                        user.id
+                    )
 
-                cur.execute("""
-                    UPDATE users
-                    SET referrals = referrals + 1
-                    WHERE user_id = %s
-                """, (
-                    invited_by,
-                ))
+            except Exception as error:
 
-                conn.commit()
-
-                cur.close()
-                conn.close()
+                logging.error(
+                    "Ошибка реферала: %s",
+                    error
+                )
 
     # Проверяем подписку
     subscribed = await is_subscribed(
@@ -210,36 +224,26 @@ async def start_handler(message: Message):
 
     if not subscribed:
 
-        keyboard = InlineKeyboardMarkup(
-            inline_keyboard=[
-                [
-                    InlineKeyboardButton(
-                        text="📢 Подписаться",
-                        url=f"https://t.me/{CHANNEL.lstrip('@')}"
-                    )
-                ],
-                [
-                    InlineKeyboardButton(
-                        text="✅ Проверить подписку",
-                        callback_data="check_sub"
-                    )
-                ]
-            ]
-        )
-
         await message.answer(
-            "🔒 Чтобы пользоваться GiftsEz, "
-            "сначала подпишись на наш канал.",
-            reply_markup=keyboard
+            "🔒 <b>Доступ к GiftsEz</b>\n\n"
+            "Чтобы пользоваться приложением, "
+            "сначала подпишись на наш канал.\n\n"
+            "После подписки нажми "
+            "«Проверить подписку».",
+            reply_markup=subscription_keyboard(),
+            parse_mode="HTML"
         )
 
         return
 
+    # Пользователь подписан
     await message.answer(
-        f"👋 Привет, {user.first_name}!\n\n"
-        "Добро пожаловать в GiftsEz 💜\n\n"
-        "Открой приложение ниже:",
-        reply_markup=main_keyboard()
+        f"👋 <b>Привет, {user.first_name}!</b>\n\n"
+        "💜 Добро пожаловать в <b>GiftsEz</b>!\n\n"
+        "Открой приложение, чтобы посмотреть "
+        "баланс, рефералов, рулетку и другие функции.",
+        reply_markup=main_keyboard(),
+        parse_mode="HTML"
     )
 
 
@@ -250,7 +254,9 @@ async def start_handler(message: Message):
 @dp.callback_query(
     F.data == "check_sub"
 )
-async def check_subscription(callback):
+async def check_subscription(
+    callback: CallbackQuery
+):
 
     user = callback.from_user
 
@@ -261,17 +267,28 @@ async def check_subscription(callback):
     if not subscribed:
 
         await callback.answer(
-            "❌ Ты ещё не подписался.",
+            "❌ Ты ещё не подписался на канал.",
             show_alert=True
         )
 
         return
 
-    await callback.message.edit_text(
-        "✅ Подписка подтверждена!\n\n"
-        "Теперь можешь открыть GiftsEz 💜",
-        reply_markup=main_keyboard()
-    )
+    try:
+
+        await callback.message.edit_text(
+            "✅ <b>Подписка подтверждена!</b>\n\n"
+            "Теперь можешь открыть GiftsEz 💜",
+            reply_markup=main_keyboard(),
+            parse_mode="HTML"
+        )
+
+    except Exception:
+
+        await callback.message.answer(
+            "✅ Подписка подтверждена!\n\n"
+            "Теперь можешь открыть GiftsEz 💜",
+            reply_markup=main_keyboard()
+        )
 
     await callback.answer()
 
@@ -282,11 +299,17 @@ async def check_subscription(callback):
 
 async def main():
 
+    global bot
+
     if not BOT_TOKEN:
 
         raise RuntimeError(
-            "BOT_TOKEN не установлен"
+            "BOT_TOKEN не установлен в Environment Variables"
         )
+
+    bot = Bot(
+        token=BOT_TOKEN
+    )
 
     init_db()
 
@@ -294,9 +317,15 @@ async def main():
         "GiftsEz bot started"
     )
 
-    await dp.start_polling(
-        bot
-    )
+    try:
+
+        await dp.start_polling(
+            bot
+        )
+
+    finally:
+
+        await bot.session.close()
 
 
 if __name__ == "__main__":
