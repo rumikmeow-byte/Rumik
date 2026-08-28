@@ -69,7 +69,6 @@ def init_db():
         )
     """)
 
-    # Промокоды
     cur.execute("""
         INSERT INTO promos
             (code, reward, max_uses)
@@ -207,7 +206,6 @@ def process_referral(
 
     try:
 
-        # Проверяем приглашённого
         cur.execute("""
             SELECT invited_by
             FROM users
@@ -222,11 +220,9 @@ def process_referral(
         if not invited:
             return False
 
-        # Уже был приглашён
         if invited[0] is not None:
             return False
 
-        # Проверяем пригласившего
         cur.execute("""
             SELECT user_id
             FROM users
@@ -238,7 +234,6 @@ def process_referral(
         if not cur.fetchone():
             return False
 
-        # Записываем реферера
         cur.execute("""
             UPDATE users
             SET invited_by = %s
@@ -253,7 +248,6 @@ def process_referral(
             conn.rollback()
             return False
 
-        # Начисляем 0.85 ⭐
         cur.execute("""
             UPDATE users
             SET
@@ -281,7 +275,6 @@ def process_referral(
 def add_referral(inviter_id, reward=0.85):
     """
     Старый метод оставлен для совместимости.
-    Для новых рефералов используй process_referral().
     """
 
     conn = get_connection()
@@ -306,3 +299,99 @@ def add_referral(inviter_id, reward=0.85):
     conn.close()
 
     return success
+
+
+# ==========================================
+# ВЫВОД STARS
+# ==========================================
+
+def create_withdrawal(user_id, amount):
+    """
+    Создаёт заявку на вывод.
+
+    Минимум: 15 ⭐
+    Максимум: 10 000 ⭐
+
+    Сумма списывается с баланса
+    только если средств достаточно.
+    """
+
+    amount = float(amount)
+
+    if amount < 15:
+        return {
+            "success": False,
+            "error": "Минимальная сумма вывода — 15 ⭐"
+        }
+
+    if amount > 10000:
+        return {
+            "success": False,
+            "error": "Максимальная сумма вывода — 10 000 ⭐"
+        }
+
+    conn = get_connection()
+    cur = conn.cursor()
+
+    try:
+
+        # Атомарно списываем баланс
+        cur.execute("""
+            UPDATE users
+            SET balance = balance - %s
+            WHERE user_id = %s
+              AND balance >= %s
+        """, (
+            amount,
+            user_id,
+            amount
+        ))
+
+        if cur.rowcount != 1:
+
+            conn.rollback()
+
+            return {
+                "success": False,
+                "error": "Недостаточно Stars на балансе"
+            }
+
+        # Создаём заявку
+        cur.execute("""
+            INSERT INTO withdrawals
+                (
+                    user_id,
+                    amount,
+                    status
+                )
+            VALUES
+                (
+                    %s,
+                    %s,
+                    'pending'
+                )
+            RETURNING id
+        """, (
+            user_id,
+            amount
+        ))
+
+        withdrawal_id = cur.fetchone()[0]
+
+        conn.commit()
+
+        return {
+            "success": True,
+            "withdrawal_id": withdrawal_id,
+            "amount": amount
+        }
+
+    except Exception:
+
+        conn.rollback()
+        raise
+
+    finally:
+
+        cur.close()
+        conn.close()
