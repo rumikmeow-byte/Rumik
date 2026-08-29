@@ -5,7 +5,7 @@ load_dotenv()
 
 # === НАСТРОЙКИ ===
 
-BOT_TOKEN = "ВСТАВЬ_НОВЫЙ_ТОКЕН_ОТ_BOTFATHER"
+BOT_TOKEN = "8990924364:AAHmhDUt18f2OtUbj1-bYPGC1uJzPBDq4_o"
 
 BOT_USERNAME = "GiftsEz_bot"
 
