@@ -62,7 +62,7 @@ def format_profile(user: dict) -> str:
         f"🆔 <b>ID:</b> <code>{user['user_id']}</code>\n\n"
         f"⭐ <b>Баланс:</b> <code>{user['balance']:.2f}</code> звёзд\n"
         f"🎁 <b>Рефералов:</b> <code>{user['referrals_count']}</code>\n\n"
-        f"<i>Фиолетово-серая вселенная ждёт тебя...</i> 💜"
+        f"<i>Звезды ждут тебя!...</i> 💜"
     )
 
 
