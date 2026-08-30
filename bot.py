@@ -88,33 +88,31 @@ async def cmd_start(message: Message, command: CommandObject):
     username = message.from_user.username or ""
     full_name = message.from_user.full_name or "Пользователь"
 
-    # Проверка подписки
-    if not await is_subscribed(user_id):
-        await message.answer(
-            "🔒 <b>Доступ закрыт</b>\n\n"
-            "Чтобы пользоваться ботом, подпишись на наш канал:\n"
-            f"<a href='{CHANNEL_LINK}'>📢 Подписаться</a>\n\n"
-            "После подписки нажми кнопку ниже ⬇️",
-            reply_markup=subscribe_kb(),
-            disable_web_page_preview=True
-        )
-        return
+    # Сначала проверяем, есть ли пользователь в базе.
+    # Если он УЖЕ есть, повторный /start не должен пытаться засчитать реферала повторно или сбивать баланс!
+    user = await get_user(user_id)
 
-    # Реферал
+    # Безопасный парсинг реферала
     referred_by = None
-    if command.args and command.args.startswith("ref_"):
+    if command.args:
+        args_clean = command.args.strip()
         try:
-            ref_id = int(command.args.split("_")[1])
-            if ref_id != user_id:
-                referred_by = ref_id
+            if args_clean.startswith("ref_"):
+                ref_id = int(args_clean.split("_")[1])
+                if ref_id != user_id:
+                    referred_by = ref_id
+            elif args_clean.isdigit():
+                ref_id = int(args_clean)
+                if ref_id != user_id:
+                    referred_by = ref_id
         except (ValueError, IndexError):
             pass
 
-    user = await get_user(user_id)
     if not user:
+        # Создаем нового пользователя с защитой от самоприглашений
         await create_user(user_id, username, full_name, referred_by)
+        
         if referred_by:
-            # Начисляем бонус рефереру
             ref_user = await get_user(referred_by)
             if ref_user:
                 await add_balance(referred_by, REFERRAL_BONUS)
@@ -130,20 +128,32 @@ async def cmd_start(message: Message, command: CommandObject):
                     pass
         user = await get_user(user_id)
     else:
+        # Если юзер уже существовал, просто обновляем его актуальный юзернейм и имя
         await update_user_info(user_id, username, full_name)
+
+    # Проверка подписки (выполняется ПОСЛЕ регистрации в базе, чтобы юзер не терялся)
+    if not await is_subscribed(user_id):
+        await message.answer(
+            "🔒 <b>Доступ закрыт</b>\n\n"
+            "Чтобы пользоваться ботом, подпишись на наш канал:\n"
+            f"<a href='{CHANNEL_LINK}'>📢 Подписаться</a>\n\n"
+            "После подписки нажми кнопку ниже ⬇️",
+            reply_markup=subscribe_kb(),
+            disable_web_page_preview=True
+        )
+        return
 
     await message.answer(welcome_text(full_name), reply_markup=main_menu_kb())
 
 
 @dp.callback_query(F.data == "check_sub")
-async def check_subscription(callback: CallbackQuery):
+async def check_subscription_callback(callback: CallbackQuery):
     user_id = callback.from_user.id
     if await is_subscribed(user_id):
         await callback.message.edit_text(
             "✅ <b>Подписка подтверждена!</b>\n\nТеперь ты можешь пользоваться ботом.",
             reply_markup=main_menu_kb()
         )
-        # Регистрируем если ещё нет
         user = await get_user(user_id)
         if not user:
             await create_user(
@@ -275,7 +285,6 @@ async def spin_roulette(callback: CallbackQuery):
         await callback.answer("Ты уже крутил сегодня!", show_alert=True)
         return
 
-    # Шансы: 0.5 (50%), 5 (30%), 10 (15%), 15 (10%)
     prizes = [0.5, 5.0, 10.0, 15.0]
     weights = [50, 30, 15, 10]
     prize = random.choices(prizes, weights=weights, k=1)[0]
@@ -348,7 +357,6 @@ async def process_withdraw_amount(message: Message, state: FSMContext):
         await message.answer(f"❌ Недостаточно средств. Баланс: {user['balance']:.2f} ⭐")
         return
 
-    # Подтверждение
     await state.clear()
     await message.answer(
         f"Ты хочешь вывести <b>{amount:.2f} ⭐</b>?\n\n"
@@ -368,12 +376,10 @@ async def confirm_withdraw(callback: CallbackQuery):
         await callback.answer("Недостаточно средств или ошибка", show_alert=True)
         return
 
-    # Списываем
     new_balance = user["balance"] - amount
     await set_balance(user_id, new_balance)
     req_id = await create_withdraw_request(user_id, amount)
 
-    # Отправляем заявку админу / в поддержку
     text_to_admin = (
         f"🔔 <b>НОВАЯ ЗАЯВКА НА ВЫВОД #{req_id}</b>\n\n"
         f"👤 Пользователь: {user.get('full_name')} (@{user.get('username') or 'нет'})\n"
@@ -383,20 +389,11 @@ async def confirm_withdraw(callback: CallbackQuery):
         f"Свяжись с пользователем для выдачи звёзд."
     )
 
-    sent = False
     if ADMIN_ID and ADMIN_ID != 0:
         try:
             await bot.send_message(ADMIN_ID, text_to_admin)
-            sent = True
         except Exception as e:
             logger.error(f"Failed to send to ADMIN_ID: {e}")
-
-    # Также пробуем отправить саппорту (если он запускал бота)
-    try:
-        # Не знаем ID, поэтому только если ADMIN_ID не сработал — ничего
-        pass
-    except Exception:
-        pass
 
     await callback.message.edit_text(
         f"✅ <b>Заявка #{req_id} создана!</b>\n\n"
@@ -408,7 +405,6 @@ async def confirm_withdraw(callback: CallbackQuery):
     )
 
 
-# Inline query для шаринга реферальной ссылки
 @dp.inline_query()
 async def inline_share(inline_query: InlineQuery):
     query = inline_query.query or ""
