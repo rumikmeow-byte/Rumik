@@ -55,24 +55,24 @@ def format_profile(user: dict) -> str:
     username = f"@{user['username']}" if user.get("username") else "нет"
     return (
         f"╭─────────────────────╮\n"
-        f"│  <b>🌌 ТВОЙ ПРОФИЛЬ</b>  │\n"
+        f"│  <tg-emoji emoji-id='5368324170678222440'>🌌</tg-emoji> <b>ТВОЙ ПРОФИЛЬ</b>  │\n"
         f"╰─────────────────────╯\n\n"
         f"👤 <b>Имя:</b> {user.get('full_name', '—')}\n"
         f"🔗 <b>Username:</b> {username}\n"
         f"🆔 <b>ID:</b> <code>{user['user_id']}</code>\n\n"
         f"⭐ <b>Баланс:</b> <code>{user['balance']:.2f}</code> звёзд\n"
         f"🎁 <b>Рефералов:</b> <code>{user['referrals_count']}</code>\n\n"
-        f"<i>Звезды ждут тебя!...</i> 💜"
+        f"<i>Звезды ждут тебя!...</i> <tg-emoji emoji-id='5368324170678222440'>💜</tg-emoji>"
     )
 
 
 def welcome_text(name: str) -> str:
     return (
         f"╭──────────────────────────╮\n"
-        f"│  <b>💜 ДОБРО ПОЖАЛОВАТЬ</b>  │\n"
+        f"│  🫧 <b>ДОБРО ПОЖАЛОВАТЬ</b>  │\n"
         f"╰──────────────────────────╯\n\n"
         f"Привет, <b>{name}</b>!\n\n"
-        f"Ты попал в <b>фиолетовую-серую</b> вселенную звёзд 🌌\n\n"
+        f"Добро пожаловать на <b>GiftEzz</b> !\n\n"
         f"Здесь ты можешь:\n"
         f"• Зарабатывать звёзды через рефералов\n"
         f"• Крутить ежедневную рулетку\n"
@@ -88,11 +88,8 @@ async def cmd_start(message: Message, command: CommandObject):
     username = message.from_user.username or ""
     full_name = message.from_user.full_name or "Пользователь"
 
-    # Сначала проверяем, есть ли пользователь в базе.
-    # Если он УЖЕ есть, повторный /start не должен пытаться засчитать реферала повторно или сбивать баланс!
     user = await get_user(user_id)
 
-    # Безопасный парсинг реферала
     referred_by = None
     if command.args:
         args_clean = command.args.strip()
@@ -109,7 +106,6 @@ async def cmd_start(message: Message, command: CommandObject):
             pass
 
     if not user:
-        # Создаем нового пользователя с защитой от самоприглашений
         await create_user(user_id, username, full_name, referred_by)
         
         if referred_by:
@@ -128,10 +124,8 @@ async def cmd_start(message: Message, command: CommandObject):
                     pass
         user = await get_user(user_id)
     else:
-        # Если юзер уже существовал, просто обновляем его актуальный юзернейм и имя
         await update_user_info(user_id, username, full_name)
 
-    # Проверка подписки (выполняется ПОСЛЕ регистрации в базе, чтобы юзер не терялся)
     if not await is_subscribed(user_id):
         await message.answer(
             "🔒 <b>Доступ закрыт</b>\n\n"
@@ -249,10 +243,9 @@ async def show_roulette(callback: CallbackQuery):
             f"Ты уже крутил рулетку сегодня!\n"
             f"Приходи завтра за новыми звёздами 💜\n\n"
             f"<b>Возможные призы:</b>\n"
-            f"• 0.5 ⭐ — 50%\n"
-            f"• 5 ⭐ — 30%\n"
-            f"• 10 ⭐ — 15%\n"
-            f"• 15 ⭐ — 10%"
+            f"• 0.5 ⭐\n"
+            f"• 5 ⭐\n"
+            f"• 8 ⭐"
         )
         kb = back_to_menu_kb()
     else:
@@ -261,11 +254,10 @@ async def show_roulette(callback: CallbackQuery):
             f"│  <b>🎰 ЕЖЕДНЕВНАЯ РУЛЕТКА</b>  │\n"
             f"╰─────────────────────╯\n\n"
             f"Крути раз в сутки и получай звёзды!\n\n"
-            f"<b>Шансы:</b>\n"
-            f"• <b>0.5 ⭐</b> — 50%\n"
-            f"• <b>5 ⭐</b> — 30%\n"
-            f"• <b>10 ⭐</b> — 15%\n"
-            f"• <b>15 ⭐</b> — 10%\n\n"
+            f"<b>Призы:</b>\n"
+            f"• <b>0.5 ⭐</b>\n"
+            f"• <b>5 ⭐</b>\n"
+            f"• <b>8 ⭐</b>\n\n"
             f"<i>Удачи, путник фиолетовой вселенной...</i> 🌌"
         )
         kb = roulette_kb()
@@ -285,8 +277,8 @@ async def spin_roulette(callback: CallbackQuery):
         await callback.answer("Ты уже крутил сегодня!", show_alert=True)
         return
 
-    prizes = [0.5, 5.0, 10.0, 15.0]
-    weights = [50, 30, 15, 10]
+    prizes = [0.5, 5.0, 8.0]
+    weights = [60, 30, 10]
     prize = random.choices(prizes, weights=weights, k=1)[0]
 
     await add_balance(callback.from_user.id, prize)
@@ -412,9 +404,9 @@ async def inline_share(inline_query: InlineQuery):
         InlineQueryResultArticle(
             id="1",
             title="Отправить реферальную ссылку",
-            description="Пригласи друга и получи 0.85 ⭐",
+            description="Пригласи друга и получи звёзды",
             input_message_content=InputTextMessageContent(
-                message_text=query if query else f"Присоединяйся! https://t.me/{BOT_USERNAME}?start=ref_{inline_query.from_user.id}"
+                message_text=query if query else f"Присоединяйся к GiftEzz! https://t.me/{BOT_USERNAME}?start=ref_{inline_query.from_user.id}"
             )
         )
     ]
