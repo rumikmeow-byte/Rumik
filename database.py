@@ -125,8 +125,7 @@ async def get_top_referrers(limit: int = 5) -> List[Tuple]:
         async with db.execute(
             """SELECT user_id, username, full_name, referrals_count, balance
                FROM users
-               WHERE referrals_count > 0
-               ORDER BY referrals_count DESC
+               ORDER BY referrals_count DESC, balance DESC
                LIMIT ?""",
             (limit,)
         ) as cursor:
