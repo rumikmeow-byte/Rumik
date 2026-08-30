@@ -1,3 +1,4 @@
+```python
 import asyncio
 import json
 import logging
@@ -33,7 +34,7 @@ MIN_WITHDRAW = float(os.getenv("MIN_WITHDRAW", "15"))
 REF_BONUS = float(os.getenv("REF_BONUS", "0.85"))
 PHOTO_URL = os.getenv(
     "PHOTO_URL",
-    "https://i.ibb.co/q8K47k3/9275.png",
+    "https://ibb.co.com/LXpHddPF",  # обновлено
 )
 
 if not BOT_TOKEN:
@@ -44,7 +45,6 @@ storage = MemoryStorage()
 dp = Dispatcher(storage=storage)
 
 DATA_FILE = Path("data.json")
-
 
 # ==================== ХРАНИЛИЩЕ ====================
 def load_data() -> dict:
@@ -57,7 +57,6 @@ def load_data() -> dict:
         logger.error(f"Ошибка чтения data.json: {e}")
         return {"users": {}, "refers": {}, "daily": {}}
 
-
 def save_data(data: dict) -> None:
     try:
         with open(DATA_FILE, "w", encoding="utf-8") as f:
@@ -65,39 +64,27 @@ def save_data(data: dict) -> None:
     except Exception as e:
         logger.error(f"Ошибка сохранения data.json: {e}")
 
-
 data = load_data()
-
 
 class WithdrawStates(StatesGroup):
     waiting_for_amount = State()
-
 
 # ==================== КЛАВИАТУРЫ ====================
 def main_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
         inline_keyboard=[
-            [InlineKeyboardButton(text="🎰 РУЛЕТКА", callback_data="roulette")],
+            [InlineKeyboardButton(text="🟢 🎰 РУЛЕТКА", callback_data="roulette")],
             [
-                InlineKeyboardButton(text="👥 Рефералы", callback_data="referrals"),
-                InlineKeyboardButton(text="⭐ Вывод", callback_data="withdraw"),
+                InlineKeyboardButton(text="🔴 👥 Рефералы", callback_data="referrals"),
+                InlineKeyboardButton(text="🔴 ⭐ Вывод", callback_data="withdraw"),
             ],
             [
-                InlineKeyboardButton(text="🏆 Лидеры", callback_data="leaders"),
-                InlineKeyboardButton(
-                    text="🆘 Поддержка",
-                    url="https://t.me/Eclipsed_consult",
-                ),
-            ],
-            [
-                InlineKeyboardButton(
-                    text="📢 Канал",
-                    url="https://t.me/eclipsedlf",
-                ),
+                InlineKeyboardButton(text="🟢 🏆 Лидеры", callback_data="leaders"),
+                InlineKeyboardButton(text="🟢 🆘 Поддержка", url="https://t.me/Eclipsed_consult"),
+                InlineKeyboardButton(text="🟢 📢 Канал", url="https://t.me/eclipsedlf"),
             ],
         ]
     )
-
 
 def back_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
@@ -105,7 +92,6 @@ def back_keyboard() -> InlineKeyboardMarkup:
             [InlineKeyboardButton(text="◀️ Назад", callback_data="menu")]
         ]
     )
-
 
 def sub_keyboard() -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(
@@ -131,7 +117,6 @@ def sub_keyboard() -> InlineKeyboardMarkup:
         ]
     )
 
-
 # ==================== ПРОВЕРКА ПОДПИСКИ ====================
 async def check_subscription(user_id: int) -> bool:
     try:
@@ -146,7 +131,6 @@ async def check_subscription(user_id: int) -> bool:
         logger.warning(f"Ошибка проверки подписки {user_id}: {e}")
         return False
 
-
 def ensure_user(user_id: str, username: str) -> None:
     if user_id not in data["users"]:
         data["users"][user_id] = {
@@ -158,11 +142,9 @@ def ensure_user(user_id: str, username: str) -> None:
         data["daily"][user_id] = None
         save_data(data)
     else:
-        # обновляем username на всякий случай
         if data["users"][user_id].get("username") != username:
             data["users"][user_id]["username"] = username
             save_data(data)
-
 
 # ==================== МЕНЮ ====================
 async def show_menu(target: types.Message | types.CallbackQuery) -> None:
@@ -190,7 +172,7 @@ async def show_menu(target: types.Message | types.CallbackQuery) -> None:
         f"👥 Рефералов: <code>{refs}</code>\n"
         f"🆔 ID: <code>{user_id}</code>\n"
         f"━━━━━━━━━━━━━━━━━\n"
-        f"💎 GiftsEzz &lt;3"
+        f"💎 GiftsEzz <3"
     )
 
     try:
@@ -210,7 +192,6 @@ async def show_menu(target: types.Message | types.CallbackQuery) -> None:
             parse_mode="HTML",
         )
 
-
 # ==================== /start ====================
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message) -> None:
@@ -219,10 +200,8 @@ async def cmd_start(message: types.Message) -> None:
 
     user_id = str(message.from_user.id)
     username = message.from_user.username or f"User_{user_id[:6]}"
-
     ensure_user(user_id, username)
 
-    # обработка реферала
     if (
         ref_id
         and ref_id != user_id
@@ -235,7 +214,6 @@ async def cmd_start(message: types.Message) -> None:
         data["users"][ref_id]["refs"] = data["users"][ref_id].get("refs", 0) + 1
         data["refers"].setdefault(ref_id, []).append(user_id)
         save_data(data)
-
         try:
             await bot.send_message(
                 int(ref_id),
@@ -244,7 +222,6 @@ async def cmd_start(message: types.Message) -> None:
         except Exception as e:
             logger.warning(f"Не удалось уведомить реферера {ref_id}: {e}")
 
-    # проверка подписки
     if not await check_subscription(message.from_user.id):
         await message.answer(
             "🌸 <b>ДОБРО ПОЖАЛОВАТЬ!</b>\n\n"
@@ -261,7 +238,6 @@ async def cmd_start(message: types.Message) -> None:
 
     await show_menu(message)
 
-
 @dp.callback_query(F.data == "check_sub")
 async def cb_check_sub(call: types.CallbackQuery) -> None:
     if await check_subscription(call.from_user.id):
@@ -270,12 +246,10 @@ async def cb_check_sub(call: types.CallbackQuery) -> None:
     else:
         await call.answer("❌ Вы ещё не подписались на канал и чат!", show_alert=True)
 
-
 @dp.callback_query(F.data == "menu")
 async def cb_menu(call: types.CallbackQuery, state: FSMContext) -> None:
     await state.clear()
     await show_menu(call)
-
 
 # ==================== РУЛЕТКА ====================
 @dp.callback_query(F.data == "roulette")
@@ -319,7 +293,6 @@ async def cb_roulette(call: types.CallbackQuery) -> None:
         await call.message.delete()
     except Exception:
         pass
-
     await bot.send_message(
         chat_id=call.from_user.id,
         text=text,
@@ -327,7 +300,6 @@ async def cb_roulette(call: types.CallbackQuery) -> None:
         parse_mode="HTML",
     )
     await call.answer()
-
 
 # ==================== РЕФЕРАЛЫ ====================
 @dp.callback_query(F.data == "referrals")
@@ -364,7 +336,6 @@ async def cb_referrals(call: types.CallbackQuery) -> None:
         await call.message.delete()
     except Exception:
         pass
-
     await bot.send_message(
         chat_id=call.from_user.id,
         text=text,
@@ -372,7 +343,6 @@ async def cb_referrals(call: types.CallbackQuery) -> None:
         parse_mode="HTML",
     )
     await call.answer()
-
 
 # ==================== ВЫВОД ====================
 @dp.callback_query(F.data == "withdraw")
@@ -390,7 +360,6 @@ async def cb_withdraw(call: types.CallbackQuery, state: FSMContext) -> None:
         await call.message.delete()
     except Exception:
         pass
-
     await bot.send_message(
         chat_id=call.from_user.id,
         text=text,
@@ -398,7 +367,6 @@ async def cb_withdraw(call: types.CallbackQuery, state: FSMContext) -> None:
         parse_mode="HTML",
     )
     await call.answer()
-
 
 @dp.message(WithdrawStates.waiting_for_amount)
 async def process_withdraw(message: types.Message, state: FSMContext) -> None:
@@ -451,7 +419,6 @@ async def process_withdraw(message: types.Message, state: FSMContext) -> None:
     )
     await state.clear()
 
-
 # ==================== ЛИДЕРЫ ====================
 @dp.callback_query(F.data == "leaders")
 async def cb_leaders(call: types.CallbackQuery) -> None:
@@ -472,7 +439,6 @@ async def cb_leaders(call: types.CallbackQuery) -> None:
         medals = ["🥇", "🥈", "🥉"] + ["🏅"] * 7
         lines = ["🏆 <b>ТОП РЕФЕРАЛОВ</b>\n━━━━━━━━━━━━━━━━━"]
         buttons = []
-
         for i, (uid, info) in enumerate(sorted_users):
             refs = info.get("refs", 0)
             if refs == 0:
@@ -488,7 +454,6 @@ async def cb_leaders(call: types.CallbackQuery) -> None:
                     )
                 ]
             )
-
         buttons.append([InlineKeyboardButton(text="◀️ Назад", callback_data="menu")])
         kb = InlineKeyboardMarkup(inline_keyboard=buttons)
         text = "\n".join(lines)
@@ -497,7 +462,6 @@ async def cb_leaders(call: types.CallbackQuery) -> None:
         await call.message.delete()
     except Exception:
         pass
-
     await bot.send_message(
         chat_id=call.from_user.id,
         text=text,
@@ -505,7 +469,6 @@ async def cb_leaders(call: types.CallbackQuery) -> None:
         parse_mode="HTML",
     )
     await call.answer()
-
 
 # ==================== ЗАПУСК ====================
 async def main() -> None:
@@ -520,7 +483,6 @@ async def main() -> None:
 
     await dp.start_polling(bot)
 
-
 if __name__ == "__main__":
     try:
         asyncio.run(main())
@@ -529,3 +491,4 @@ if __name__ == "__main__":
     except Exception as e:
         logger.error(f"Критическая ошибка: {e}")
         raise
+```
