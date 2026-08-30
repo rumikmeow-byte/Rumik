@@ -1,243 +1,3 @@
-```python
-import asyncio
-import json
-import logging
-import os
-import random
-from datetime import datetime, timedelta
-from pathlib import Path
-
-from aiogram import Bot, Dispatcher, F, types
-from aiogram.filters import Command, CommandStart
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup
-from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-from dotenv import load_dotenv
-
-load_dotenv()
-
-# ==================== ЛОГИРОВАНИЕ ====================
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s | %(levelname)-8s | %(name)s | %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S",
-)
-logger = logging.getLogger(__name__)
-
-# ==================== КОНФИГ ====================
-BOT_TOKEN = os.getenv("BOT_TOKEN")
-CHANNEL_ID = os.getenv("CHANNEL_ID", "@eclipsedlf")
-CHAT_ID = os.getenv("CHAT_ID", "@GiftsEzzChat")
-SUPPORT_ID = int(os.getenv("SUPPORT_ID", "8644223884"))
-MIN_WITHDRAW = float(os.getenv("MIN_WITHDRAW", "15"))
-REF_BONUS = float(os.getenv("REF_BONUS", "0.85"))
-PHOTO_URL = os.getenv(
-    "PHOTO_URL",
-    "https://ibb.co.com/LXpHddPF",  # обновлено
-)
-
-if not BOT_TOKEN:
-    raise ValueError("BOT_TOKEN не задан! Добавь переменную окружения BOT_TOKEN.")
-
-bot = Bot(token=BOT_TOKEN)
-storage = MemoryStorage()
-dp = Dispatcher(storage=storage)
-
-DATA_FILE = Path("data.json")
-
-# ==================== ХРАНИЛИЩЕ ====================
-def load_data() -> dict:
-    if not DATA_FILE.exists():
-        return {"users": {}, "refers": {}, "daily": {}}
-    try:
-        with open(DATA_FILE, "r", encoding="utf-8") as f:
-            return json.load(f)
-    except Exception as e:
-        logger.error(f"Ошибка чтения data.json: {e}")
-        return {"users": {}, "refers": {}, "daily": {}}
-
-def save_data(data: dict) -> None:
-    try:
-        with open(DATA_FILE, "w", encoding="utf-8") as f:
-            json.dump(data, f, indent=2, ensure_ascii=False)
-    except Exception as e:
-        logger.error(f"Ошибка сохранения data.json: {e}")
-
-data = load_data()
-
-class WithdrawStates(StatesGroup):
-    waiting_for_amount = State()
-
-# ==================== КЛАВИАТУРЫ ====================
-def main_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="🟢 🎰 РУЛЕТКА", callback_data="roulette")],
-            [
-                InlineKeyboardButton(text="🔴 👥 Рефералы", callback_data="referrals"),
-                InlineKeyboardButton(text="🔴 ⭐ Вывод", callback_data="withdraw"),
-            ],
-            [
-                InlineKeyboardButton(text="🟢 🏆 Лидеры", callback_data="leaders"),
-                InlineKeyboardButton(text="🟢 🆘 Поддержка", url="https://t.me/Eclipsed_consult"),
-                InlineKeyboardButton(text="🟢 📢 Канал", url="https://t.me/eclipsedlf"),
-            ],
-        ]
-    )
-
-def back_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="◀️ Назад", callback_data="menu")]
-        ]
-    )
-
-def sub_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [
-                InlineKeyboardButton(
-                    text="📢 ПОДПИСАТЬСЯ НА КАНАЛ",
-                    url="https://t.me/eclipsedlf",
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="💬 ПОДПИСАТЬСЯ НА ЧАТ",
-                    url="https://t.me/GiftsEzzChat",
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    text="✅ Я ПОДПИСАЛСЯ!",
-                    callback_data="check_sub",
-                )
-            ],
-        ]
-    )
-
-# ==================== ПРОВЕРКА ПОДПИСКИ ====================
-async def check_subscription(user_id: int) -> bool:
-    try:
-        member_ch = await bot.get_chat_member(CHANNEL_ID, user_id)
-        member_chat = await bot.get_chat_member(CHAT_ID, user_id)
-        ok_statuses = {"member", "administrator", "creator"}
-        return (
-            member_ch.status in ok_statuses
-            and member_chat.status in ok_statuses
-        )
-    except Exception as e:
-        logger.warning(f"Ошибка проверки подписки {user_id}: {e}")
-        return False
-
-def ensure_user(user_id: str, username: str) -> None:
-    if user_id not in data["users"]:
-        data["users"][user_id] = {
-            "balance": 0.0,
-            "refs": 0,
-            "username": username,
-        }
-        data["refers"][user_id] = []
-        data["daily"][user_id] = None
-        save_data(data)
-    else:
-        if data["users"][user_id].get("username") != username:
-            data["users"][user_id]["username"] = username
-            save_data(data)
-
-# ==================== МЕНЮ ====================
-async def show_menu(target: types.Message | types.CallbackQuery) -> None:
-    if isinstance(target, types.CallbackQuery):
-        user = target.from_user
-        chat_id = target.from_user.id
-        try:
-            await target.message.delete()
-        except Exception:
-            pass
-    else:
-        user = target.from_user
-        chat_id = target.chat.id
-
-    user_id = str(user.id)
-    user_data = data["users"].get(user_id, {"balance": 0.0, "refs": 0})
-    balance = user_data.get("balance", 0.0)
-    refs = user_data.get("refs", 0)
-
-    text = (
-        f"Добро пожаловать в <b>GiftsEzz</b>!\n\n"
-        f"🌟 <b>Ваш профиль</b>\n"
-        f"━━━━━━━━━━━━━━━━━\n"
-        f"⭐ Баланс: <code>{balance:.2f}</code>\n"
-        f"👥 Рефералов: <code>{refs}</code>\n"
-        f"🆔 ID: <code>{user_id}</code>\n"
-        f"━━━━━━━━━━━━━━━━━\n"
-        f"💎 GiftsEzz <3"
-    )
-
-    try:
-        await bot.send_photo(
-            chat_id=chat_id,
-            photo=PHOTO_URL,
-            caption=text,
-            reply_markup=main_keyboard(),
-            parse_mode="HTML",
-        )
-    except Exception as e:
-        logger.warning(f"Не удалось отправить фото: {e}")
-        await bot.send_message(
-            chat_id=chat_id,
-            text=text,
-            reply_markup=main_keyboard(),
-            parse_mode="HTML",
-        )
-
-# ==================== /start ====================
-@dp.message(CommandStart())
-async def cmd_start(message: types.Message) -> None:
-    args = message.text.split(maxsplit=1)
-    ref_id = args[1].strip() if len(args) > 1 else None
-
-    user_id = str(message.from_user.id)
-    username = message.from_user.username or f"User_{user_id[:6]}"
-    ensure_user(user_id, username)
-
-    if (
-        ref_id
-        and ref_id != user_id
-        and ref_id in data["users"]
-        and user_id not in data["refers"].get(ref_id, [])
-    ):
-        data["users"][ref_id]["balance"] = (
-            data["users"][ref_id].get("balance", 0.0) + REF_BONUS
-        )
-        data["users"][ref_id]["refs"] = data["users"][ref_id].get("refs", 0) + 1
-        data["refers"].setdefault(ref_id, []).append(user_id)
-        save_data(data)
-        try:
-            await bot.send_message(
-                int(ref_id),
-                f"🎉 Новый реферал! +{REF_BONUS} ⭐",
-            )
-        except Exception as e:
-            logger.warning(f"Не удалось уведомить реферера {ref_id}: {e}")
-
-    if not await check_subscription(message.from_user.id):
-        await message.answer(
-            "🌸 <b>ДОБРО ПОЖАЛОВАТЬ!</b>\n\n"
-            "❕ Подпишитесь на канал и чат, чтобы получить доступ:\n"
-            "• 🎰 Ежедневная рулетка\n"
-            f"• 👥 Рефералы (+{REF_BONUS} ⭐)\n"
-            f"• 💰 Вывод от {MIN_WITHDRAW} ⭐\n"
-            "• 🏆 Топ лидеров\n\n"
-            "⚠️ <i>Без подписки бот не работает!</i>",
-            reply_markup=sub_keyboard(),
-            parse_mode="HTML",
-        )
-        return
-
-    await show_menu(message)
-
 @dp.callback_query(F.data == "check_sub")
 async def cb_check_sub(call: types.CallbackQuery) -> None:
     if await check_subscription(call.from_user.id):
@@ -246,10 +6,12 @@ async def cb_check_sub(call: types.CallbackQuery) -> None:
     else:
         await call.answer("❌ Вы ещё не подписались на канал и чат!", show_alert=True)
 
+
 @dp.callback_query(F.data == "menu")
 async def cb_menu(call: types.CallbackQuery, state: FSMContext) -> None:
     await state.clear()
     await show_menu(call)
+
 
 # ==================== РУЛЕТКА ====================
 @dp.callback_query(F.data == "roulette")
@@ -293,6 +55,7 @@ async def cb_roulette(call: types.CallbackQuery) -> None:
         await call.message.delete()
     except Exception:
         pass
+
     await bot.send_message(
         chat_id=call.from_user.id,
         text=text,
@@ -300,6 +63,7 @@ async def cb_roulette(call: types.CallbackQuery) -> None:
         parse_mode="HTML",
     )
     await call.answer()
+
 
 # ==================== РЕФЕРАЛЫ ====================
 @dp.callback_query(F.data == "referrals")
@@ -336,6 +100,7 @@ async def cb_referrals(call: types.CallbackQuery) -> None:
         await call.message.delete()
     except Exception:
         pass
+
     await bot.send_message(
         chat_id=call.from_user.id,
         text=text,
@@ -343,6 +108,7 @@ async def cb_referrals(call: types.CallbackQuery) -> None:
         parse_mode="HTML",
     )
     await call.answer()
+
 
 # ==================== ВЫВОД ====================
 @dp.callback_query(F.data == "withdraw")
@@ -360,6 +126,7 @@ async def cb_withdraw(call: types.CallbackQuery, state: FSMContext) -> None:
         await call.message.delete()
     except Exception:
         pass
+
     await bot.send_message(
         chat_id=call.from_user.id,
         text=text,
@@ -367,6 +134,7 @@ async def cb_withdraw(call: types.CallbackQuery, state: FSMContext) -> None:
         parse_mode="HTML",
     )
     await call.answer()
+
 
 @dp.message(WithdrawStates.waiting_for_amount)
 async def process_withdraw(message: types.Message, state: FSMContext) -> None:
@@ -419,6 +187,7 @@ async def process_withdraw(message: types.Message, state: FSMContext) -> None:
     )
     await state.clear()
 
+
 # ==================== ЛИДЕРЫ ====================
 @dp.callback_query(F.data == "leaders")
 async def cb_leaders(call: types.CallbackQuery) -> None:
@@ -439,6 +208,7 @@ async def cb_leaders(call: types.CallbackQuery) -> None:
         medals = ["🥇", "🥈", "🥉"] + ["🏅"] * 7
         lines = ["🏆 <b>ТОП РЕФЕРАЛОВ</b>\n━━━━━━━━━━━━━━━━━"]
         buttons = []
+
         for i, (uid, info) in enumerate(sorted_users):
             refs = info.get("refs", 0)
             if refs == 0:
@@ -454,6 +224,7 @@ async def cb_leaders(call: types.CallbackQuery) -> None:
                     )
                 ]
             )
+
         buttons.append([InlineKeyboardButton(text="◀️ Назад", callback_data="menu")])
         kb = InlineKeyboardMarkup(inline_keyboard=buttons)
         text = "\n".join(lines)
@@ -462,6 +233,7 @@ async def cb_leaders(call: types.CallbackQuery) -> None:
         await call.message.delete()
     except Exception:
         pass
+
     await bot.send_message(
         chat_id=call.from_user.id,
         text=text,
@@ -469,6 +241,7 @@ async def cb_leaders(call: types.CallbackQuery) -> None:
         parse_mode="HTML",
     )
     await call.answer()
+
 
 # ==================== ЗАПУСК ====================
 async def main() -> None:
@@ -483,7 +256,8 @@ async def main() -> None:
 
     await dp.start_polling(bot)
 
-if __name__ == "__main__":
+
+if name == "main":
     try:
         asyncio.run(main())
     except (KeyboardInterrupt, SystemExit):
@@ -491,4 +265,3 @@ if __name__ == "__main__":
     except Exception as e:
         logger.error(f"Критическая ошибка: {e}")
         raise
-```
