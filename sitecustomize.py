@@ -1,36 +1,35 @@
 """GiftsMMS UI extension.
 
-Loaded automatically by Python before bot.py. It keeps the original bot logic
-intact and adds the new dark menu + advertising order flow.
+Loaded automatically by Python before bot.py. Keeps the original bot logic
+intact and adds the dark menu + advertising order flow.
 """
 
 import functools
 import html
 import sys
 
-from aiogram import F, types
-from aiogram.fsm.context import FSMContext
-from aiogram.fsm.state import State, StatesGroup
-from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-
-
 MENU_IMAGE_URL = "https://images.weserv.nl/?url=raw.githubusercontent.com/rumikmeow-byte/Rumik/main/assets/menu_logo.svg&w=768"
-
-
-class AdsStates(StatesGroup):
-    waiting_for_text = State()
-
 
 _original_start_polling = None
 
 
 def _install_giftsmms_ui(dp):
+    # Import aiogram only after dependencies are installed. Render may import
+    # sitecustomize during the build before pip installs requirements.txt.
+    from aiogram import F, types
+    from aiogram.fsm.context import FSMContext
+    from aiogram.fsm.state import State, StatesGroup
+    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+
     main = sys.modules.get("__main__")
     if main is None or getattr(main, "_GIFTSMMS_UI_INSTALLED", False):
         return
 
     main._GIFTSMMS_UI_INSTALLED = True
     bot = main.bot
+
+    class AdsStates(StatesGroup):
+        waiting_for_text = State()
 
     def dark_menu_keyboard(user_id: int):
         rows = [
@@ -121,7 +120,8 @@ def _install_giftsmms_ui(dp):
                 reply_markup=dark_menu_keyboard(user.id),
                 parse_mode="HTML",
             )
-        except Exception:
+        except Exception as e:
+            main.logger.warning(f"Не удалось отправить новое фото меню: {e}")
             await bot.send_message(
                 chat_id=chat_id,
                 text=caption,
@@ -129,6 +129,9 @@ def _install_giftsmms_ui(dp):
                 parse_mode="HTML",
             )
 
+    # The original handlers keep references to the original show_menu.
+    # Replace those handler callbacks directly, rather than only replacing
+    # main.show_menu in the module namespace.
     main.show_menu = custom_show_menu
     main.main_menu_keyboard = dark_menu_keyboard
 
@@ -216,20 +219,66 @@ def _install_giftsmms_ui(dp):
         )
         await state.clear()
 
+    # Replace already-registered /start and /menu handlers.
+    async def patched_cmd_start(message: types.Message):
+        user_id = str(message.from_user.id)
+        await main.ensure_user(
+            user_id,
+            message.from_user.username or f"User_{user_id[:6]}",
+            message.from_user.full_name or "",
+        )
+        args = (message.text or "").split()
+        if len(args) > 1:
+            ref_id = args[1]
+            if ref_id.startswith("ref_"):
+                ref_id = ref_id[4:]
+            if ref_id != user_id and ref_id.isdigit():
+                async with main.db_pool.acquire() as db:
+                    async with db.transaction():
+                        user_row = await db.fetchrow(
+                            "SELECT referred_by FROM users WHERE user_id = $1 FOR UPDATE",
+                            int(user_id),
+                        )
+                        ref_exists = await db.fetchrow(
+                            "SELECT user_id FROM users WHERE user_id = $1",
+                            int(ref_id),
+                        )
+                        if ref_exists and user_row and user_row["referred_by"] is None:
+                            await db.execute(
+                                "UPDATE users SET referred_by = $1 WHERE user_id = $2 AND referred_by IS NULL",
+                                int(ref_id), int(user_id),
+                            )
+        await custom_show_menu(message)
+
+    for handler in getattr(dp.message, "handlers", []):
+        callback = getattr(handler, "callback", None)
+        if getattr(callback, "__name__", "") == "cmd_start":
+            handler.callback = patched_cmd_start
+
+    # Add ad handlers after the existing callbacks; their callback data is unique.
     dp.callback_query.register(cb_buy_ads, F.data == "buy_ads")
     dp.callback_query.register(cb_ads_package, F.data.startswith("ads_package:"))
     dp.message.register(process_ads, AdsStates.waiting_for_text)
 
+    main.logger.info("GiftsMMS UI extension loaded")
 
-try:
-    from aiogram import Dispatcher
-    _original_start_polling = Dispatcher.start_polling
 
-    @functools.wraps(_original_start_polling)
-    async def _patched_start_polling(self, *bots, **kwargs):
-        _install_giftsmms_ui(self)
-        return await _original_start_polling(self, *bots, **kwargs)
+def _patch_dispatcher():
+    global _original_start_polling
+    try:
+        from aiogram import Dispatcher
+        _original_start_polling = Dispatcher.start_polling
 
-    Dispatcher.start_polling = _patched_start_polling
-except Exception:
-    pass
+        @functools.wraps(_original_start_polling)
+        async def _patched_start_polling(self, *bots, **kwargs):
+            _install_giftsmms_ui(self)
+            return await _original_start_polling(self, *bots, **kwargs)
+
+        Dispatcher.start_polling = _patched_start_polling
+    except Exception:
+        # During Render build aiogram is not installed yet. Python starts a
+        # fresh process for the actual service, where aiogram is available.
+        pass
+
+
+_patch_dispatcher()
