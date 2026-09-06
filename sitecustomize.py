@@ -14,8 +14,7 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 
 
-# Replace this URL after uploading the requested logo to the repository.
-MENU_IMAGE_URL = "https://raw.githubusercontent.com/rumikmeow-byte/Rumik/main/assets/menu_logo.jpg"
+MENU_IMAGE_URL = "https://images.weserv.nl/?url=raw.githubusercontent.com/rumikmeow-byte/Rumik/main/assets/menu_logo.svg&w=768"
 
 
 class AdsStates(StatesGroup):
