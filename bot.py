@@ -59,6 +59,14 @@ db_pool = None
 # TOPUP_INTEGRATION_V1
 register_topup_handlers(dp, bot, lambda: db_pool, SUPPORT_ID)
 
+# BALANCE_BUTTON_V1
+@dp.callback_query(F.data == "balance")
+async def balance_callback(call: types.CallbackQuery):
+    data = await get_user_data(str(call.from_user.id))
+    balance = data.get("balance", 0) if data else 0
+    await call.answer(f"Ваш баланс: {balance} ⭐", show_alert=True)
+
+
 
 # =========================================================
 # СОСТОЯНИЯ
@@ -432,6 +440,12 @@ def main_menu_keyboard(
                 callback_data="topup"
             ),
         ],
+        [
+            InlineKeyboardButton(
+                text="💰 Баланс",
+                callback_data="balance"
+            ),
+        ],
         # Группа 3: Рефералы
         [
             InlineKeyboardButton(
@@ -461,15 +475,7 @@ def main_menu_keyboard(
             )
         ])
 
-    # Формируем клавиатуру с разделителями (пустыми строками между группами)
-    keyboard = []
-    for i, row in enumerate(buttons):
-        keyboard.append(row)
-        # После каждой группы, кроме последней, добавляем пустую строку (разделитель)
-        if i < len(buttons) - 1:
-            keyboard.append([])  # пустая строка
-
-    return InlineKeyboardMarkup(inline_keyboard=keyboard)
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
 def back_keyboard() -> InlineKeyboardMarkup:
