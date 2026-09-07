@@ -1,21 +1,22 @@
 """GiftsMMS UI extension.
 
 Loaded automatically by Python before bot.py. Keeps the original bot logic
-intact and adds the dark menu + advertising order flow.
+intact and adds the dark menu, referral sharing and advertising link.
 """
 
 import functools
 import html
 import sys
+from urllib.parse import quote
 
 MENU_IMAGE_URL = "https://images.weserv.nl/?url=raw.githubusercontent.com/rumikmeow-byte/Rumik/main/assets/menu_logo.svg&w=768"
+REFERRAL_IMAGE_URL = "https://images.weserv.nl/?url=raw.githubusercontent.com/rumikmeow-byte/Rumik/main/assets/referral_card.svg&w=768"
+ADS_CONTACT_URL = "https://t.me/HuskyTelegram"
 
 _original_start_polling = None
 
 
 def _install_giftsmms_ui(dp):
-    # Import aiogram only after dependencies are installed. Render may import
-    # sitecustomize during the build before pip installs requirements.txt.
     from aiogram import F, types
     from aiogram.fsm.context import FSMContext
     from aiogram.fsm.state import State, StatesGroup
@@ -43,44 +44,24 @@ def _install_giftsmms_ui(dp):
                 InlineKeyboardButton(text="💳  ВЫВОД", callback_data="withdraw"),
             ],
             [InlineKeyboardButton(text="👑  ЛИДЕРЫ ПО РЕФЕРАЛАМ", callback_data="leaders")],
-            [InlineKeyboardButton(text="📣  КУПИТЬ РЕКЛАМУ", callback_data="buy_ads")],
+            [InlineKeyboardButton(text="📣  КУПИТЬ РЕКЛАМУ", url=ADS_CONTACT_URL)],
         ]
-
         support_id = getattr(main, "SUPPORT_ID", 0)
         if user_id == support_id and support_id:
-            rows.append([
-                InlineKeyboardButton(text="⚙️  АДМИН-ПАНЕЛЬ", callback_data="admin_panel")
-            ])
-
+            rows.append([InlineKeyboardButton(text="⚙️  АДМИН-ПАНЕЛЬ", callback_data="admin_panel")])
         return InlineKeyboardMarkup(inline_keyboard=rows)
-
-    def ads_keyboard():
-        return InlineKeyboardMarkup(
-            inline_keyboard=[
-                [InlineKeyboardButton(text="🟦  1 час — 5 ⭐", callback_data="ads_package:1h:5")],
-                [InlineKeyboardButton(text="🟪  24 часа — 25 ⭐", callback_data="ads_package:24h:25")],
-                [InlineKeyboardButton(text="🟥  3 дня — 60 ⭐", callback_data="ads_package:3d:60")],
-                [InlineKeyboardButton(text="🔙  Назад в меню", callback_data="menu")],
-            ]
-        )
 
     async def custom_show_menu(target):
         user = target.from_user
         user_id = str(user.id)
-
-        await main.ensure_user(
-            user_id,
-            user.username or f"User_{user_id[:6]}",
-            user.full_name or "",
-        )
+        await main.ensure_user(user_id, user.username or f"User_{user_id[:6]}", user.full_name or "")
 
         if user.id != main.SUPPORT_ID and not await main.check_subscription(user.id):
             if isinstance(target, types.CallbackQuery):
                 await target.answer("🔒 Подпишитесь на каналы!", show_alert=True)
             await bot.send_message(
                 user.id,
-                "🔒 <b>Для доступа к боту подпишитесь на наши каналы!</b>\n\n"
-                "После подписки нажмите «✨ Проверить подписку».",
+                "🔒 <b>Для доступа к боту подпишитесь на наши каналы!</b>\n\nПосле подписки нажмите «✨ Проверить подписку».",
                 reply_markup=await main.subscription_keyboard(),
                 parse_mode="HTML",
             )
@@ -90,7 +71,6 @@ def _install_giftsmms_ui(dp):
         data = await main.get_user_data(user_id)
         balance = float(data.get("balance", 0))
         name = html.escape(user.first_name or "Helper")
-
         caption = (
             f"✨ <b>Привет, {name}!</b>\n"
             "💎 <b>Добро пожаловать в GiftsMMS Bot</b>\n"
@@ -113,120 +93,63 @@ def _install_giftsmms_ui(dp):
             chat_id = target.chat.id
 
         try:
-            await bot.send_photo(
-                chat_id=chat_id,
-                photo=MENU_IMAGE_URL,
-                caption=caption,
-                reply_markup=dark_menu_keyboard(user.id),
-                parse_mode="HTML",
-            )
+            await bot.send_photo(chat_id=chat_id, photo=MENU_IMAGE_URL, caption=caption,
+                                 reply_markup=dark_menu_keyboard(user.id), parse_mode="HTML")
         except Exception as e:
             main.logger.warning(f"Не удалось отправить новое фото меню: {e}")
-            await bot.send_message(
-                chat_id=chat_id,
-                text=caption,
-                reply_markup=dark_menu_keyboard(user.id),
-                parse_mode="HTML",
-            )
+            await bot.send_message(chat_id=chat_id, text=caption,
+                                   reply_markup=dark_menu_keyboard(user.id), parse_mode="HTML")
 
-    # The original handlers keep references to the original show_menu.
-    # Replace those handler callbacks directly, rather than only replacing
-    # main.show_menu in the module namespace.
     main.show_menu = custom_show_menu
     main.main_menu_keyboard = dark_menu_keyboard
 
-    async def cb_buy_ads(call: types.CallbackQuery):
+    async def cb_referrals_new(call: types.CallbackQuery):
         if not await main.require_subscription(call):
             return
-        await call.message.edit_text(
-            "📣 <b>ПОКУПКА РЕКЛАМЫ</b>\n"
-            "━━━━━━━━━━━━━━━━━━━━\n"
-            "Выбери срок размещения рекламы:\n\n"
-            "🟦 1 час — <b>5 ⭐</b>\n"
-            "🟪 24 часа — <b>25 ⭐</b>\n"
-            "🟥 3 дня — <b>60 ⭐</b>\n\n"
-            "После выбора отправь текст/ссылку рекламы. "
-            "Заявка уйдёт администратору на проверку.",
-            reply_markup=ads_keyboard(),
-            parse_mode="HTML",
-        )
-        await call.answer()
 
-    async def cb_ads_package(call: types.CallbackQuery, state: FSMContext):
-        if not await main.require_subscription(call):
-            return
+        user_id = str(call.from_user.id)
+        await main.ensure_user(user_id, call.from_user.username or f"User_{user_id[:6]}", call.from_user.full_name or "")
+        me = await bot.get_me()
+        ref_link = f"https://t.me/{me.username}?start=ref_{user_id}"
+        share_text = "Приглашай друзей и Зарабатывай звёзды!"
+        share_url = "https://t.me/share/url?url=" + quote(ref_link, safe="") + "&text=" + quote(share_text, safe="")
+        data = await main.get_user_data(user_id)
+        refs = data.get("refs", 0)
+
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="📨  ОТПРАВИТЬ ДРУГУ", url=share_url)],
+            [InlineKeyboardButton(text="🔙  НАЗАД В МЕНЮ", callback_data="menu")],
+        ])
+        caption = (
+            "👥 <b>Приглашай друзей и Зарабатывай звёзды!</b>\n\n"
+            f"🔗 <b>Твоя реферальная ссылка:</b>\n<code>{html.escape(ref_link)}</code>\n\n"
+            f"⭐ За каждого друга: <b>+{main.REF_BONUS:.2f} ⭐</b>\n"
+            f"👥 Приглашено: <b>{refs}</b>\n\n"
+            "Нажми «📨 ОТПРАВИТЬ ДРУГУ» и выбери друга в Telegram."
+        )
         try:
-            _, period, price = call.data.split(":", 2)
-            price = float(price)
-        except (ValueError, AttributeError):
-            await call.answer("❌ Ошибка пакета", show_alert=True)
-            return
-
-        await state.update_data(ad_period=period, ad_price=price)
-        await state.set_state(AdsStates.waiting_for_text)
-        await call.message.edit_text(
-            "📝 <b>Отправь рекламный материал</b>\n"
-            "━━━━━━━━━━━━━━━━━━━━\n"
-            "Пришли одним сообщением текст рекламы, ссылку или описание проекта.\n\n"
-            f"📌 Пакет: <b>{period}</b>\n"
-            f"💰 Стоимость: <b>{price:.0f} ⭐</b>",
-            reply_markup=InlineKeyboardMarkup(inline_keyboard=[[
-                InlineKeyboardButton(text="🔙 Отмена", callback_data="menu")
-            ]]),
-            parse_mode="HTML",
-        )
+            await call.message.delete()
+        except Exception:
+            pass
+        try:
+            await bot.send_photo(call.from_user.id, REFERRAL_IMAGE_URL, caption=caption,
+                                 reply_markup=kb, parse_mode="HTML")
+        except Exception as e:
+            main.logger.warning(f"Не удалось отправить картинку рефералов: {e}")
+            await bot.send_message(call.from_user.id, caption, reply_markup=kb, parse_mode="HTML")
         await call.answer()
 
-    async def process_ads(message: types.Message, state: FSMContext):
-        if not await main.require_subscription(message):
-            await state.clear()
-            return
+    # Replace the original referrals callback so our handler runs first.
+    for handler in getattr(dp.callback_query, "handlers", []):
+        callback = getattr(handler, "callback", None)
+        if getattr(callback, "__name__", "") == "cb_referrals":
+            handler.callback = cb_referrals_new
 
-        data = await state.get_data()
-        period = data.get("ad_period", "не выбран")
-        price = float(data.get("ad_price", 0))
-        username = f"@{message.from_user.username}" if message.from_user.username else "нет username"
-
-        admin_id = getattr(main, "SUPPORT_ID", 0)
-        if not admin_id:
-            await message.answer(
-                "❌ Приём рекламных заявок временно недоступен.",
-                reply_markup=main.back_keyboard(),
-            )
-            await state.clear()
-            return
-
-        admin_text = (
-            "📣 <b>НОВАЯ ЗАЯВКА НА РЕКЛАМУ</b>\n"
-            "━━━━━━━━━━━━━━━━━━━━\n"
-            f"👤 Пользователь: {html.escape(message.from_user.full_name)}\n"
-            f"🔗 Username: {html.escape(username)}\n"
-            f"🆔 ID: <code>{message.from_user.id}</code>\n"
-            f"📌 Срок: <b>{html.escape(str(period))}</b>\n"
-            f"💰 Цена: <b>{price:.0f} ⭐</b>\n"
-            "━━━━━━━━━━━━━━━━━━━━\n"
-            f"📝 Материал:\n{html.escape(message.text or '')}"
-        )
-
-        await bot.send_message(admin_id, admin_text, parse_mode="HTML")
-        await message.answer(
-            "✅ <b>Заявка отправлена!</b>\n\n"
-            f"📌 Пакет: <b>{html.escape(str(period))}</b>\n"
-            f"💰 Стоимость: <b>{price:.0f} ⭐</b>\n\n"
-            "Администратор свяжется с тобой для подтверждения размещения.",
-            reply_markup=main.back_keyboard(),
-            parse_mode="HTML",
-        )
-        await state.clear()
-
-    # Replace already-registered /start and /menu handlers.
+    # Replace already-registered /start and /menu handlers so ref links work
+    # with both ?start=123 and ?start=ref_123.
     async def patched_cmd_start(message: types.Message):
         user_id = str(message.from_user.id)
-        await main.ensure_user(
-            user_id,
-            message.from_user.username or f"User_{user_id[:6]}",
-            message.from_user.full_name or "",
-        )
+        await main.ensure_user(user_id, message.from_user.username or f"User_{user_id[:6]}", message.from_user.full_name or "")
         args = (message.text or "").split()
         if len(args) > 1:
             ref_id = args[1]
@@ -235,19 +158,10 @@ def _install_giftsmms_ui(dp):
             if ref_id != user_id and ref_id.isdigit():
                 async with main.db_pool.acquire() as db:
                     async with db.transaction():
-                        user_row = await db.fetchrow(
-                            "SELECT referred_by FROM users WHERE user_id = $1 FOR UPDATE",
-                            int(user_id),
-                        )
-                        ref_exists = await db.fetchrow(
-                            "SELECT user_id FROM users WHERE user_id = $1",
-                            int(ref_id),
-                        )
+                        user_row = await db.fetchrow("SELECT referred_by FROM users WHERE user_id = $1 FOR UPDATE", int(user_id))
+                        ref_exists = await db.fetchrow("SELECT user_id FROM users WHERE user_id = $1", int(ref_id))
                         if ref_exists and user_row and user_row["referred_by"] is None:
-                            await db.execute(
-                                "UPDATE users SET referred_by = $1 WHERE user_id = $2 AND referred_by IS NULL",
-                                int(ref_id), int(user_id),
-                            )
+                            await db.execute("UPDATE users SET referred_by = $1 WHERE user_id = $2 AND referred_by IS NULL", int(ref_id), int(user_id))
         await custom_show_menu(message)
 
     for handler in getattr(dp.message, "handlers", []):
@@ -255,12 +169,7 @@ def _install_giftsmms_ui(dp):
         if getattr(callback, "__name__", "") == "cmd_start":
             handler.callback = patched_cmd_start
 
-    # Add ad handlers after the existing callbacks; their callback data is unique.
-    dp.callback_query.register(cb_buy_ads, F.data == "buy_ads")
-    dp.callback_query.register(cb_ads_package, F.data.startswith("ads_package:"))
-    dp.message.register(process_ads, AdsStates.waiting_for_text)
-
-    main.logger.info("GiftsMMS UI extension loaded")
+    main.logger.info("GiftsMMS UI extension loaded: referrals + Husky ads link")
 
 
 def _patch_dispatcher():
@@ -276,8 +185,7 @@ def _patch_dispatcher():
 
         Dispatcher.start_polling = _patched_start_polling
     except Exception:
-        # During Render build aiogram is not installed yet. Python starts a
-        # fresh process for the actual service, where aiogram is available.
+        # sitecustomize can run during Render build before dependencies exist.
         pass
 
 
