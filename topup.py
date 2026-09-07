@@ -8,6 +8,19 @@ TOPUP_OPTIONS = {
     "100": (100, "💎 Алмаз"),
 }
 
+# 🎁 КЕЙСЫ
+# Шансы намеренно НЕ показываются пользователю.
+CASE_OPTIONS = {
+    15: {"small": 5, "medium": 17, "big": 50},
+    25: {"small": 10, "medium": 28, "big": 100},
+    50: {"small": 20, "medium": 55, "big": 150},
+    75: {"small": 30, "medium": 83, "big": 250},
+    100: {"small": 40, "medium": 110, "big": 350},
+    150: {"small": 60, "medium": 165, "big": 500},
+    250: {"small": 100, "medium": 275, "big": 850},
+    500: {"small": 200, "medium": 550, "big": 1500},
+}
+
 
 def topup_menu_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[
@@ -32,6 +45,31 @@ def topup_admin_keyboard(request_id: int):
             InlineKeyboardButton(text="✅ Зачислить", callback_data=f"topup_approve:{request_id}"),
             InlineKeyboardButton(text="❌ Отклонить", callback_data=f"topup_reject:{request_id}"),
         ]
+    ])
+
+
+def cases_keyboard():
+    buttons = []
+    prices = list(CASE_OPTIONS.keys())
+    for i in range(0, len(prices), 2):
+        row = []
+        for price in prices[i:i + 2]:
+            row.append(InlineKeyboardButton(
+                text=f"🎁 Кейс {price} ⭐",
+                callback_data=f"case:{price}"
+            ))
+        buttons.append(row)
+    buttons.append([
+        InlineKeyboardButton(text="🔙 Назад в меню", callback_data="menu")
+    ])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def case_open_keyboard(price: int):
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✨ Открыть кейс", callback_data=f"case_open:{price}")],
+        [InlineKeyboardButton(text="🔙 К кейсам", callback_data="cases")],
+        [InlineKeyboardButton(text="🏠 В меню", callback_data="menu")],
     ])
 
 
@@ -67,7 +105,6 @@ def register_topup_handlers(dp, bot, db_pool_getter, support_id):
         amount, gift_name = TOPUP_OPTIONS[key]
         pool = db_pool_getter()
 
-        # Создаём черновик заявки. Администратор её ещё НЕ получает.
         async with pool.acquire() as db:
             existing = await db.fetchrow(
                 """
@@ -228,6 +265,168 @@ def register_topup_handlers(dp, bot, db_pool_getter, support_id):
             )
         except Exception:
             pass
+
+    # =====================================================
+    # КЕЙСЫ
+    # =====================================================
+
+    @dp.callback_query(F.data == "cases")
+    async def open_cases(call: types.CallbackQuery):
+        text = (
+            "🎁 <b>КЕЙСЫ</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━\n"
+            "Открывай кейсы и выигрывай ⭐\n\n"
+            "💎 Чем дороже кейс — тем выше возможный приз.\n"
+            "🍀 Удачи!"
+        )
+        await call.answer()
+        await replace_message(call, text, cases_keyboard())
+
+    @dp.callback_query(F.data.startswith("case:") & ~F.data.startswith("case_open:"))
+    async def case_preview(call: types.CallbackQuery):
+        try:
+            price = int(call.data.split(":", 1)[1])
+        except (ValueError, IndexError):
+            await call.answer("Ошибка кейса", show_alert=True)
+            return
+        if price not in CASE_OPTIONS:
+            await call.answer("Такого кейса нет", show_alert=True)
+            return
+
+        data = CASE_OPTIONS[price]
+        text = (
+            f"🎁 <b>Кейс за {price} ⭐</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"🪙 Обычный приз: <b>{data['small']} ⭐</b>\n"
+            f"✨ Средний приз: <b>{data['medium']} ⭐</b>\n"
+            f"💎 Большой приз: <b>{data['big']} ⭐</b>\n\n"
+            "━━━━━━━━━━━━━━━━━━━━\n"
+            "Нажми кнопку ниже, чтобы открыть кейс."
+        )
+        await call.answer()
+        await replace_message(call, text, case_open_keyboard(price))
+
+    @dp.callback_query(F.data.startswith("case_open:"))
+    async def case_open(call: types.CallbackQuery):
+        try:
+            price = int(call.data.split(":", 1)[1])
+        except (ValueError, IndexError):
+            await call.answer("Ошибка кейса", show_alert=True)
+            return
+
+        if price not in CASE_OPTIONS:
+            await call.answer("Такого кейса нет", show_alert=True)
+            return
+
+        pool = db_pool_getter()
+        prizes = CASE_OPTIONS[price]
+
+        # 70% малый, 20% средний, 10% большой.
+        import random
+        roll = random.random()
+        if roll < 0.70:
+            prize = prizes["small"]
+        elif roll < 0.90:
+            prize = prizes["medium"]
+        else:
+            prize = prizes["big"]
+
+        async with pool.acquire() as db:
+            async with db.transaction():
+                row = await db.fetchrow(
+                    "SELECT balance FROM users WHERE user_id = $1 FOR UPDATE",
+                    call.from_user.id,
+                )
+                balance = float(row["balance"]) if row else 0.0
+
+                if balance < price:
+                    await call.answer(
+                        f"❌ Недостаточно ⭐. Нужно {price} ⭐",
+                        show_alert=True,
+                    )
+                    return
+
+                await db.execute(
+                    "UPDATE users SET balance = balance - $1 + $2 WHERE user_id = $3",
+                    price,
+                    prize,
+                    call.from_user.id,
+                )
+
+        new_data = await pool.fetchrow(
+            "SELECT balance FROM users WHERE user_id = $1",
+            call.from_user.id,
+        )
+        new_balance = float(new_data["balance"]) if new_data else 0.0
+
+        if prize >= prizes["big"]:
+            result_title = "💎 ДЖЕКПОТ!"
+        elif prize >= prizes["medium"]:
+            result_title = "✨ КРУПНЫЙ ВЫИГРЫШ!"
+        else:
+            result_title = "🎁 ВЫИГРЫШ!"
+
+        text = (
+            f"🎁 <b>КЕЙС ЗА {price} ⭐</b>\n"
+            "━━━━━━━━━━━━━━━━━━━━\n\n"
+            f"{result_title}\n\n"
+            f"⭐ Ты получил: <b>+{prize} ⭐</b>\n"
+            f"💰 Баланс: <code>{new_balance:.2f} ⭐</code>\n\n"
+            "━━━━━━━━━━━━━━━━━━━━\n"
+            "🎉 Попробуешь ещё раз?"
+        )
+
+        await call.answer(f"🎉 +{prize} ⭐")
+        await replace_message(call, text, InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text=f"🎁 Ещё кейс за {price} ⭐", callback_data=f"case:{price}")],
+            [InlineKeyboardButton(text="🎁 Все кейсы", callback_data="cases")],
+            [InlineKeyboardButton(text="🏠 В меню", callback_data="menu")],
+        ]))
+
+    # Меняем кнопку старой «Рулетки» на красивый раздел кейсов.
+    async def patch_main_menu_on_startup(*args, **kwargs):
+        import sys
+        target = None
+        for module in list(sys.modules.values()):
+            if module is None:
+                continue
+            try:
+                if hasattr(module, "main_menu_keyboard"):
+                    target = module
+                    break
+            except Exception:
+                continue
+
+        if target is None:
+            return
+
+        original = target.main_menu_keyboard
+
+        def patched_main_menu_keyboard(user_id, support_id=None):
+            keyboard = original(user_id, support_id)
+            new_rows = []
+            for row in keyboard.inline_keyboard:
+                new_row = []
+                for button in row:
+                    if button.callback_data == "roulette":
+                        new_row.append(
+                            InlineKeyboardButton(
+                                text="🎁 Кейсы",
+                                callback_data="cases"
+                            )
+                        )
+                    else:
+                        new_row.append(button)
+                new_rows.append(new_row)
+            keyboard.inline_keyboard = new_rows
+            return keyboard
+
+        target.main_menu_keyboard = patched_main_menu_keyboard
+
+    try:
+        dp.startup.register(patch_main_menu_on_startup)
+    except Exception:
+        pass
 
 
 def html_escape(value):
