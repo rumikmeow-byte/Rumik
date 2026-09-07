@@ -1,0 +1,70 @@
+name: Restore bot and add cases
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Restore bot.py and add cases button
+        shell: bash
+        run: |
+          git checkout d82dea5460353594e7ce4659f46a4734c485de87 -- bot.py
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('bot.py')
+          text = path.read_text(encoding='utf-8')
+          old = '''        # Группа 3: Рулетка и Вывод
+          [
+              InlineKeyboardButton(
+                  text="🎰 Рулетка",
+                  callback_data="roulette"
+              ),
+              InlineKeyboardButton(
+                  text="💳 Вывод",
+                  callback_data="withdraw"
+              ),
+          ],
+          '''
+          new = '''        # Группа 3: Кейсы, Рулетка и Вывод
+          [
+              InlineKeyboardButton(
+                  text="🎁 Кейсы",
+                  callback_data="cases"
+              ),
+              InlineKeyboardButton(
+                  text="🎰 Рулетка",
+                  callback_data="roulette"
+              ),
+              InlineKeyboardButton(
+                  text="💳 Вывод",
+                  callback_data="withdraw"
+              ),
+          ],
+          '''
+          if old not in text:
+              raise SystemExit('main menu roulette/withdraw block not found')
+          text = text.replace(old, new, 1)
+          path.write_text(text, encoding='utf-8')
+          PY
+          python -m py_compile bot.py topup.py
+
+      - name: Commit and remove temporary workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add bot.py
+          git rm .github/workflows/fix_main_menu_cases.yml
+          git commit -m "Fix main menu cases button"
+          git push origin main
