@@ -453,8 +453,12 @@ def main_menu_keyboard(
                 callback_data="referrals"
             ),
         ],
-        # Группа 3: Рулетка и Вывод
+        # Группа 3: Кейсы, Рулетка и Вывод
         [
+            InlineKeyboardButton(
+                text="🎁 Кейсы",
+                callback_data="cases"
+            ),
             InlineKeyboardButton(
                 text="🎰 Рулетка",
                 callback_data="roulette"
