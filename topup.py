@@ -49,16 +49,19 @@ def topup_admin_keyboard(request_id: int):
 
 
 def cases_keyboard():
-    buttons = []
+    # Три кейса в ряд: аккуратная «пирамидка» 3 + 3 + 2.
     prices = list(CASE_OPTIONS.keys())
-    for i in range(0, len(prices), 2):
-        row = []
-        for price in prices[i:i + 2]:
-            row.append(InlineKeyboardButton(
-                text=f"🎁 Кейс {price} ⭐",
+    buttons = []
+    for i in range(0, len(prices), 3):
+        row = [
+            InlineKeyboardButton(
+                text=f"🎁 {price} ⭐",
                 callback_data=f"case:{price}"
-            ))
+            )
+            for price in prices[i:i + 3]
+        ]
         buttons.append(row)
+
     buttons.append([
         InlineKeyboardButton(text="🔙 Назад в меню", callback_data="menu")
     ])
@@ -383,7 +386,7 @@ def register_topup_handlers(dp, bot, db_pool_getter, support_id):
             [InlineKeyboardButton(text="🏠 В меню", callback_data="menu")],
         ]))
 
-    # Меняем кнопку старой «Рулетки» на красивый раздел кейсов.
+    # Добавляем «Кейсы» в главный экран рядом с рулеткой и выводом.
     async def patch_main_menu_on_startup(*args, **kwargs):
         import sys
         target = None
@@ -406,18 +409,14 @@ def register_topup_handlers(dp, bot, db_pool_getter, support_id):
             keyboard = original(user_id, support_id)
             new_rows = []
             for row in keyboard.inline_keyboard:
-                new_row = []
-                for button in row:
-                    if button.callback_data == "roulette":
-                        new_row.append(
-                            InlineKeyboardButton(
-                                text="🎁 Кейсы",
-                                callback_data="cases"
-                            )
-                        )
-                    else:
-                        new_row.append(button)
-                new_rows.append(new_row)
+                if any(button.callback_data == "roulette" for button in row):
+                    new_rows.append([
+                        InlineKeyboardButton(text="🎁 Кейсы", callback_data="cases"),
+                        InlineKeyboardButton(text="🎰 Рулетка", callback_data="roulette"),
+                        InlineKeyboardButton(text="💳 Вывод", callback_data="withdraw"),
+                    ])
+                else:
+                    new_rows.append(row)
             keyboard.inline_keyboard = new_rows
             return keyboard
 
