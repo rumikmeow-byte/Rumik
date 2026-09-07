@@ -1,0 +1,84 @@
+name: Fix menu buttons
+
+on:
+  workflow_dispatch:
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch bot menu
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import re
+
+          p = Path('bot.py')
+          s = p.read_text(encoding='utf-8')
+
+          # Remove invalid empty rows from the inline keyboard.
+          old = '''    # Формируем клавиатуру с разделителями (пустыми строками между группами)\n    keyboard = []\n    for i, row in enumerate(buttons):\n        keyboard.append(row)\n        # После каждой группы, кроме последней, добавляем пустую строку (разделитель)\n        if i < len(buttons) - 1:\n            keyboard.append([])  # пустая строка\n\n    return InlineKeyboardMarkup(inline_keyboard=keyboard)'''
+          if old in s:
+              s = s.replace(old, '    return InlineKeyboardMarkup(inline_keyboard=buttons)', 1)
+
+          # Add a visible balance button directly below the top-up button.
+          topup = '''        # Группа 2: Пополнение баланса\n        [\n            InlineKeyboardButton(\n                text="⭐ Пополнить баланс",\n                callback_data="topup"\n            ),\n        ],'''
+          balance_row = '''        [\n            InlineKeyboardButton(\n                text="💰 Баланс",\n                callback_data="balance"\n            ),\n        ],'''
+          if topup in s and 'callback_data="balance"' not in s:
+              s = s.replace(topup, topup + '\n' + balance_row, 1)
+
+          # Add balance callback once.
+          marker = '# BALANCE_BUTTON_V1'
+          if marker not in s:
+              anchor = 'register_topup_handlers(dp, bot, lambda: db_pool, SUPPORT_ID)'
+              handler = '''\n\n# BALANCE_BUTTON_V1\n@dp.callback_query(F.data == "balance")\nasync def balance_callback(call: types.CallbackQuery):\n    data = await get_user_data(str(call.from_user.id))\n    balance = data.get("balance", 0) if data else 0\n    await call.answer(f"Ваш баланс: {balance} ⭐", show_alert=True)\n'''
+              if anchor in s:
+                  s = s.replace(anchor, anchor + handler, 1)
+
+          # Remove standalone referral-leader buttons from keyboards.
+          pattern = re.compile(r'(?ms)^\s*\[\s*\n\s*InlineKeyboardButton\(.*?\n\s*\),\s*\n\s*\],\s*$')
+          lines = s.splitlines(True)
+          out = []
+          i = 0
+          while i < len(lines):
+              if re.match(r'^\s*\[\s*$', lines[i]):
+                  j = i + 1
+                  depth = 1
+                  while j < len(lines):
+                      if '[' in lines[j] and ']' not in lines[j]:
+                          depth += 1
+                      if lines[j].strip() == '],':
+                          depth -= 1
+                          if depth == 0:
+                              block = ''.join(lines[i:j+1])
+                              low = block.lower()
+                              if ('лидер' in low or 'топ реферал' in low or 'callback_data="leaders"' in low or "callback_data='leaders'" in low):
+                                  i = j + 1
+                                  continue
+                              break
+                      j += 1
+              out.append(lines[i])
+              i += 1
+          s = ''.join(out)
+
+          # Stop updating the referral leaders table; referrals themselves remain intact.
+          s = s.replace('        await update_leader(ref_id)\n', '')
+
+          p.write_text(s, encoding='utf-8')
+          PY
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add bot.py
+          git diff --cached --quiet && exit 0
+          git commit -m "Fix menu buttons and remove referral leaders"
+          git push
+      - name: Remove temporary workflow
+        run: |
+          git rm .github/workflows/fix-menu.yml
+          git commit -m "Remove temporary menu fix workflow"
+          git push
