@@ -1,0 +1,31 @@
+name: Remove leaders button
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Update menu
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          p = Path('bot.py')
+          s = p.read_text()
+          old = '''        # Группа 4: Лидеры\n        [\n            InlineKeyboardButton(\n                text="👑 Лидеры по рефералам",\n                callback_data="leaders"\n            ),\n        ],\n'''
+          if old in s:
+              s = s.replace(old, '')
+          s = s.replace('    "leaders": "👑 Лидеры по рефералам",\n', '')
+          p.write_text(s)
+          PY
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add bot.py
+          git commit -m "Remove referral leaders button" || true
+          git push
+          git rm .github/workflows/remove-leaders.yml
+          git commit -m "Remove temporary workflow"
+          git push
