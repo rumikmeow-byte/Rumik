@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1536" height="1034" viewBox="0 0 1536 1034">
+<defs><linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#9b59d0"/><stop offset="1" stop-color="#c05ad0"/></linearGradient><linearGradient id="box" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#eef0ff"/><stop offset="1" stop-color="#b9b7e9"/></linearGradient></defs>
+<rect width="1536" height="1034" fill="url(#bg)"/>
+<g opacity=".18" fill="#6d36a8"><circle cx="170" cy="160" r="58"/><circle cx="1320" cy="250" r="58"/><circle cx="180" cy="760" r="58"/><circle cx="1330" cy="820" r="58"/></g>
+<g stroke="#66658f" stroke-width="18" stroke-linejoin="round">
+<path fill="#d9d9f3" d="M470 350l145-150 165 100-145 150z"/><path fill="#c3c2eb" d="M910 350L765 200 600 300l145 150z"/>
+<path fill="url(#box)" d="M475 365l285 105 300-110-25 350-280 150-280-145z"/>
+<path fill="#d5d5f3" d="M760 470v390l275-150 25-350z"/>
+<path fill="#b7b6e5" d="M475 365l285 105v390L500 715z"/>
+<path fill="#a9a8db" d="M760 470l300-110-20 110-280 115z"/>
+<path fill="#eeeefe" d="M650 410l110 60 110-60v100L760 565l-110-55z"/>
+<path fill="#c7c6eb" d="M760 470v395"/>
+</g>
+<g fill="#fff" font-family="Arial, sans-serif" text-anchor="middle"><text x="768" y="900" font-size="72" font-weight="700">Приглашай друзей</text><text x="768" y="980" font-size="54">и зарабатывай звёзды!</text></g>
+</svg>
