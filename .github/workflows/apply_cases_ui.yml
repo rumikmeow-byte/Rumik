@@ -1,0 +1,174 @@
+name: Apply cases UI update
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  update-ui:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Update cases keyboard and main menu
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('topup.py')
+          text = path.read_text(encoding='utf-8')
+
+          old_cases = '''def cases_keyboard():
+              buttons = []
+              prices = list(CASE_OPTIONS.keys())
+              for i in range(0, len(prices), 2):
+                  row = []
+                  for price in prices[i:i + 2]:
+                      row.append(InlineKeyboardButton(
+                          text=f"🎁 Кейс {price} ⭐",
+                          callback_data=f"case:{price}"
+                      ))
+                  buttons.append(row)
+              buttons.append([
+                  InlineKeyboardButton(text="🔙 Назад в меню", callback_data="menu")
+              ])
+              return InlineKeyboardMarkup(inline_keyboard=buttons)
+          '''
+
+          new_cases = '''def cases_keyboard():
+              # Три кейса в ряд: аккуратная «пирамидка» 3 + 3 + 2.
+              prices = list(CASE_OPTIONS.keys())
+              buttons = []
+              for i in range(0, len(prices), 3):
+                  row = [
+                      InlineKeyboardButton(
+                          text=f"🎁 {price} ⭐",
+                          callback_data=f"case:{price}"
+                      )
+                      for price in prices[i:i + 3]
+                  ]
+                  buttons.append(row)
+
+              buttons.append([
+                  InlineKeyboardButton(text="🔙 Назад в меню", callback_data="menu")
+              ])
+              return InlineKeyboardMarkup(inline_keyboard=buttons)
+          '''
+
+          if old_cases not in text:
+              raise SystemExit('cases_keyboard block not found')
+          text = text.replace(old_cases, new_cases, 1)
+
+          old_patch = '''    # Меняем кнопку старой «Рулетки» на красивый раздел кейсов.
+              async def patch_main_menu_on_startup(*args, **kwargs):
+                  import sys
+                  target = None
+                  for module in list(sys.modules.values()):
+                      if module is None:
+                          continue
+                      try:
+                          if hasattr(module, "main_menu_keyboard"):
+                              target = module
+                              break
+                      except Exception:
+                          continue
+
+                  if target is None:
+                      return
+
+                  original = target.main_menu_keyboard
+
+                  def patched_main_menu_keyboard(user_id, support_id=None):
+                      keyboard = original(user_id, support_id)
+                      new_rows = []
+                      for row in keyboard.inline_keyboard:
+                          new_row = []
+                          for button in row:
+                              if button.callback_data == "roulette":
+                                  new_row.append(
+                                      InlineKeyboardButton(
+                                          text="🎁 Кейсы",
+                                          callback_data="cases"
+                                      )
+                                  )
+                              else:
+                                  new_row.append(button)
+                          new_rows.append(new_row)
+                      keyboard.inline_keyboard = new_rows
+                      return keyboard
+
+                  target.main_menu_keyboard = patched_main_menu_keyboard
+
+              try:
+                  dp.startup.register(patch_main_menu_on_startup)
+              except Exception:
+                  pass
+          '''
+
+          new_patch = '''    # Добавляем «Кейсы» в главный экран рядом с рулеткой и выводом.
+              async def patch_main_menu_on_startup(*args, **kwargs):
+                  import sys
+                  target = None
+                  for module in list(sys.modules.values()):
+                      if module is None:
+                          continue
+                      try:
+                          if hasattr(module, "main_menu_keyboard"):
+                              target = module
+                              break
+                      except Exception:
+                          continue
+
+                  if target is None:
+                      return
+
+                  original = target.main_menu_keyboard
+
+                  def patched_main_menu_keyboard(user_id, support_id=None):
+                      keyboard = original(user_id, support_id)
+                      new_rows = []
+                      for row in keyboard.inline_keyboard:
+                          if any(button.callback_data == "roulette" for button in row):
+                              new_rows.append([
+                                  InlineKeyboardButton(text="🎁 Кейсы", callback_data="cases"),
+                                  InlineKeyboardButton(text="🎰 Рулетка", callback_data="roulette"),
+                                  InlineKeyboardButton(text="💳 Вывод", callback_data="withdraw"),
+                              ])
+                          else:
+                              new_rows.append(row)
+                      keyboard.inline_keyboard = new_rows
+                      return keyboard
+
+                  target.main_menu_keyboard = patched_main_menu_keyboard
+
+              try:
+                  dp.startup.register(patch_main_menu_on_startup)
+              except Exception:
+                  pass
+          '''
+
+          if old_patch not in text:
+              raise SystemExit('startup patch block not found')
+          text = text.replace(old_patch, new_patch, 1)
+
+          path.write_text(text, encoding='utf-8')
+          PY
+
+          python -m py_compile topup.py
+
+      - name: Commit UI changes and remove temporary workflow
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add topup.py
+          git rm .github/workflows/apply_cases_ui.yml
+          git commit -m "Improve cases menu layout"
+          git push origin main
