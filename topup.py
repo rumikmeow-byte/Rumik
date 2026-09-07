@@ -36,7 +36,7 @@ def topup_admin_keyboard(request_id: int):
 
 
 async def replace_message(call: types.CallbackQuery, text: str, reply_markup):
-    """Главное меню — фото, поэтому edit_text для него падает. Надёжно заменяем сообщение новым текстом."""
+    """Главное меню — фото, поэтому edit_text для него падает. Заменяем сообщение новым текстом."""
     try:
         await call.message.delete()
     except Exception:
@@ -65,54 +65,73 @@ def register_topup_handlers(dp, bot, db_pool_getter, support_id):
             return
 
         amount, gift_name = TOPUP_OPTIONS[key]
+        pool = db_pool_getter()
+
+        # Создаём черновик заявки. Администратор её ещё НЕ получает.
+        async with pool.acquire() as db:
+            existing = await db.fetchrow(
+                """
+                SELECT id FROM topup_requests
+                WHERE user_id = $1 AND status = 'waiting_admin'
+                ORDER BY id DESC LIMIT 1
+                """,
+                call.from_user.id,
+            )
+            if existing:
+                await replace_message(
+                    call,
+                    "⏳ <b>У вас уже есть заявка на проверке.</b>\n\nДождитесь решения администратора.",
+                    topup_menu_keyboard(),
+                )
+                return
+
+            row = await db.fetchrow(
+                """
+                INSERT INTO topup_requests (user_id, username, full_name, amount, gift_name, status)
+                VALUES ($1, $2, $3, $4, $5, 'pending')
+                RETURNING id
+                """,
+                call.from_user.id,
+                call.from_user.username or "",
+                call.from_user.full_name or "",
+                amount,
+                gift_name,
+            )
+
         await replace_message(
             call,
             f"🎁 <b>{gift_name}</b> — <b>{amount} ⭐</b>\n\n"
             "1. Нажмите кнопку ниже.\n"
             "2. Отправьте выбранный подарок пользователю <b>@HuskyTelegram</b>.\n"
             "3. Вернитесь в бота и нажмите «Я отправил подарок».\n\n"
-            "После этого заявка уйдёт администратору на проверку.\n"
-            "Администратор вручную проверит подарок и подтвердит или отклонит заявку.",
+            "⚠️ Заявка администратору отправится только после нажатия этой кнопки.",
             topup_payment_keyboard(),
         )
 
     @dp.callback_query(F.data == "topup_sent")
     async def topup_sent(call: types.CallbackQuery):
-        await call.answer("Заявка отправляется администратору", show_alert=True)
         pool = db_pool_getter()
 
-        # Пользователь выбирает подарок, отправляет его @HuskyTelegram,
-        # затем только здесь создаётся заявка администратору.
         async with pool.acquire() as db:
             row = await db.fetchrow(
                 """
                 SELECT * FROM topup_requests
-                WHERE user_id = $1 AND status IN ('pending', 'waiting_admin')
+                WHERE user_id = $1 AND status = 'pending'
                 ORDER BY id DESC
                 LIMIT 1
                 """,
                 call.from_user.id,
             )
-
-            # Старые заявки не должны мешать новой заявке.
-            if row and row["status"] == "waiting_admin":
-                await replace_message(
-                    call,
-                    "⏳ <b>У вас уже есть заявка на проверке.</b>\n\n"
-                    "Дождитесь решения администратора.",
-                    topup_menu_keyboard(),
-                )
-                return
-
-            # Для совместимости определяем выбранный подарок из последнего шага.
-            # Если его нет в БД, просим выбрать подарок заново.
             if not row:
-                await replace_message(
-                    call,
-                    "❗ Не удалось определить выбранный подарок.\n\nВыберите подарок заново.",
-                    topup_menu_keyboard(),
-                )
+                await call.answer("Сначала выберите подарок", show_alert=True)
                 return
+
+            await db.execute(
+                "UPDATE topup_requests SET status = 'waiting_admin', updated_at = NOW() WHERE id = $1",
+                row["id"],
+            )
+
+        await call.answer("Заявка отправлена администратору", show_alert=True)
 
         username = f"@{call.from_user.username}" if call.from_user.username else "без username"
         await bot.send_message(
@@ -123,21 +142,16 @@ def register_topup_handlers(dp, bot, db_pool_getter, support_id):
             f"Username: {html_escape(username)}\n"
             f"User ID: <code>{call.from_user.id}</code>\n"
             f"Подарок: <b>{html_escape(row['gift_name'])}</b>\n"
-            f"Сумма: <b>+{row['amount']} ⭐</b>",
+            f"Сумма: <b>+{row['amount']} ⭐</b>\n\n"
+            "Проверьте подарок, отправленный пользователем в @HuskyTelegram.",
             parse_mode="HTML",
             reply_markup=topup_admin_keyboard(row["id"]),
         )
 
-        async with pool.acquire() as db:
-            await db.execute(
-                "UPDATE topup_requests SET status = 'waiting_admin', updated_at = NOW() WHERE id = $1",
-                row["id"],
-            )
-
         await replace_message(
             call,
             "⏳ <b>Заявка отправлена на проверку.</b>\n\n"
-            "Администратор проверит подарок у @HuskyTelegram и после этого зачислит сумму на баланс или отклонит заявку.",
+            "Администратор проверит подарок у @HuskyTelegram и подтвердит или отклонит заявку.",
             topup_menu_keyboard(),
         )
 
