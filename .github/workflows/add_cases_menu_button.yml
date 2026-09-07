@@ -1,0 +1,75 @@
+name: Add cases button to main menu
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  patch-main-menu:
+    if: github.actor != 'github-actions[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Patch main menu
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('bot.py')
+          text = path.read_text(encoding='utf-8')
+
+          old = '''        # Группа 3: Рулетка и Вывод
+        [
+            InlineKeyboardButton(
+                text="🎰 Рулетка",
+                callback_data="roulette"
+            ),
+            InlineKeyboardButton(
+                text="💳 Вывод",
+                callback_data="withdraw"
+            ),
+        ],'''
+
+          new = '''        # Группа 3: Кейсы, Рулетка и Вывод
+        [
+            InlineKeyboardButton(
+                text="🎁 Кейсы",
+                callback_data="cases"
+            ),
+            InlineKeyboardButton(
+                text="🎰 Рулетка",
+                callback_data="roulette"
+            ),
+            InlineKeyboardButton(
+                text="💳 Вывод",
+                callback_data="withdraw"
+            ),
+        ],'''
+
+          if 'callback_data="cases"' in text and 'text="🎁 Кейсы"' in text:
+              print('Cases button already present; nothing to change.')
+          elif old not in text:
+              raise SystemExit('Expected main menu block was not found; refusing to modify bot.py.')
+          else:
+              path.write_text(text.replace(old, new, 1), encoding='utf-8')
+              print('Cases button added directly to main_menu_keyboard.')
+          PY
+
+      - name: Commit and push
+        run: |
+          if git diff --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add bot.py
+          git commit -m "Add cases button directly to main menu"
+          git push
