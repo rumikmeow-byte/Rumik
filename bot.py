@@ -14,6 +14,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+from topup import register_topup_handlers
 
 
 # =========================================================
@@ -54,6 +55,9 @@ if not DATABASE_URL:
 bot = Bot(token=BOT_TOKEN)
 dp = Dispatcher(storage=MemoryStorage())
 db_pool = None
+
+# TOPUP_INTEGRATION_V1
+register_topup_handlers(dp, bot, lambda: db_pool, SUPPORT_ID)
 
 
 # =========================================================
@@ -134,6 +138,21 @@ async def init_db():
         await db.execute("""
             CREATE INDEX IF NOT EXISTS idx_leaders_refs
             ON leaders(refs DESC)
+        """)
+
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS topup_requests (
+                id BIGSERIAL PRIMARY KEY,
+                user_id BIGINT NOT NULL,
+                username TEXT,
+                full_name TEXT,
+                amount NUMERIC(12, 2) NOT NULL,
+                gift_name TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'pending',
+                processed_by BIGINT DEFAULT NULL,
+                created_at TIMESTAMP DEFAULT NOW(),
+                updated_at TIMESTAMP DEFAULT NOW()
+            )
         """)
 
         await db.execute("""
@@ -407,7 +426,14 @@ def main_menu_keyboard(
                 url="https://t.me/Eclipsed_consult"
             ),
         ],
-        # Группа 2: Рефералы
+        # Группа 2: Пополнение баланса
+        [
+            InlineKeyboardButton(
+                text="⭐ Пополнить баланс",
+                callback_data="topup"
+            ),
+        ],
+        # Группа 3: Рефералы
         [
             InlineKeyboardButton(
                 text="🎁 Рефералы",
