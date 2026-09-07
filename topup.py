@@ -49,7 +49,7 @@ def topup_admin_keyboard(request_id: int):
 
 
 def cases_keyboard():
-    # Три кейса в ряд: аккуратная «пирамидка» 3 + 3 + 2.
+    # Три кейса в ряд: аккуратная «пирамида» 3 + 3 + 2.
     prices = list(CASE_OPTIONS.keys())
     buttons = []
     for i in range(0, len(prices), 3):
@@ -386,46 +386,41 @@ def register_topup_handlers(dp, bot, db_pool_getter, support_id):
             [InlineKeyboardButton(text="🏠 В меню", callback_data="menu")],
         ]))
 
-    # Добавляем «Кейсы» в главный экран рядом с рулеткой и выводом.
-    async def patch_main_menu_on_startup(*args, **kwargs):
-        import sys
-        target = None
-        for module in list(sys.modules.values()):
-            if module is None:
-                continue
-            try:
-                if hasattr(module, "main_menu_keyboard"):
-                    target = module
-                    break
-            except Exception:
-                continue
+    # Надёжно добавляем «Кейсы» в клавиатуру главного меню непосредственно
+    # перед отправкой фото. Это не зависит от порядка объявления main_menu_keyboard.
+    original_send_photo = bot.send_photo
 
-        if target is None:
-            return
+    async def send_photo_with_cases(*args, **kwargs):
+        keyboard = kwargs.get("reply_markup")
+        if keyboard is not None and hasattr(keyboard, "inline_keyboard"):
+            rows = keyboard.inline_keyboard
+            has_cases = any(
+                button.callback_data == "cases"
+                for row in rows
+                for button in row
+                if getattr(button, "callback_data", None)
+            )
+            has_roulette = any(
+                button.callback_data == "roulette"
+                for row in rows
+                for button in row
+                if getattr(button, "callback_data", None)
+            )
+            if has_roulette and not has_cases:
+                new_rows = []
+                for row in rows:
+                    if any(getattr(button, "callback_data", None) == "roulette" for button in row):
+                        new_rows.append([
+                            InlineKeyboardButton(text="🎁 Кейсы", callback_data="cases"),
+                            InlineKeyboardButton(text="🎰 Рулетка", callback_data="roulette"),
+                            InlineKeyboardButton(text="💳 Вывод", callback_data="withdraw"),
+                        ])
+                    else:
+                        new_rows.append(row)
+                keyboard.inline_keyboard = new_rows
+        return await original_send_photo(*args, **kwargs)
 
-        original = target.main_menu_keyboard
-
-        def patched_main_menu_keyboard(user_id, support_id=None):
-            keyboard = original(user_id, support_id)
-            new_rows = []
-            for row in keyboard.inline_keyboard:
-                if any(button.callback_data == "roulette" for button in row):
-                    new_rows.append([
-                        InlineKeyboardButton(text="🎁 Кейсы", callback_data="cases"),
-                        InlineKeyboardButton(text="🎰 Рулетка", callback_data="roulette"),
-                        InlineKeyboardButton(text="💳 Вывод", callback_data="withdraw"),
-                    ])
-                else:
-                    new_rows.append(row)
-            keyboard.inline_keyboard = new_rows
-            return keyboard
-
-        target.main_menu_keyboard = patched_main_menu_keyboard
-
-    try:
-        dp.startup.register(patch_main_menu_on_startup)
-    except Exception:
-        pass
+    bot.send_photo = send_photo_with_cases
 
 
 def html_escape(value):
