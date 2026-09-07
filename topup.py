@@ -5,7 +5,6 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 TOPUP_OPTIONS = {
     "15": (15, "🧸 Мишка"),
     "25": (25, "🌹 Роза"),
-    "50": (50, "🚀 Ракета"),
     "100": (100, "💎 Алмаз"),
 }
 
@@ -14,7 +13,6 @@ def topup_menu_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🧸 Мишка — 15 ⭐", callback_data="topup:15")],
         [InlineKeyboardButton(text="🌹 Роза — 25 ⭐", callback_data="topup:25")],
-        [InlineKeyboardButton(text="🚀 Ракета — 50 ⭐", callback_data="topup:50")],
         [InlineKeyboardButton(text="💎 Алмаз — 100 ⭐", callback_data="topup:100")],
         [InlineKeyboardButton(text="🔙 Назад", callback_data="menu")],
     ])
