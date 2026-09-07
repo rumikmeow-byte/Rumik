@@ -1,0 +1,61 @@
+name: Fix cases button placement
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  fix:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Restore and patch bot
+        shell: bash
+        run: |
+          git checkout d82dea5460353594e7ce4659f46a4734c485de87 -- bot.py
+          python - <<'PY'
+          from pathlib import Path
+          path = Path('bot.py')
+          text = path.read_text(encoding='utf-8')
+          marker = '        # Группа 3: Рулетка и Вывод\n'
+          start = text.find(marker)
+          if start < 0:
+              raise SystemExit('menu marker not found')
+          end_marker = '        # Если админ – добавляем админ-панель\n'
+          end = text.find(end_marker, start)
+          if end < 0:
+              raise SystemExit('menu end marker not found')
+          replacement = '''        # Группа 3: Кейсы, Рулетка и Вывод
+        [
+            InlineKeyboardButton(
+                text="🎁 Кейсы",
+                callback_data="cases"
+            ),
+            InlineKeyboardButton(
+                text="🎰 Рулетка",
+                callback_data="roulette"
+            ),
+            InlineKeyboardButton(
+                text="💳 Вывод",
+                callback_data="withdraw"
+            ),
+        ],
+'''
+          text = text[:start] + replacement + text[end:]
+          path.write_text(text, encoding='utf-8')
+          PY
+          python -m py_compile bot.py topup.py
+      - name: Commit fix
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add bot.py
+          git rm .github/workflows/fix_main_menu_cases2.yml
+          git commit -m "Fix cases button in main menu"
+          git push origin main
