@@ -400,7 +400,6 @@ BUTTON_TEXTS = {
     "referrals": "🎁 Рефералы",
     "roulette": "🎰 Рулетка",
     "withdraw": "💳 Вывод",
-    "leaders": "👑 Лидеры по рефералам",
     "admin": "⚙️ Админ-панель",
 }
 
@@ -449,13 +448,6 @@ def main_menu_keyboard(
             InlineKeyboardButton(
                 text="💳 Вывод",
                 callback_data="withdraw"
-            ),
-        ],
-        # Группа 4: Лидеры
-        [
-            InlineKeyboardButton(
-                text="👑 Лидеры по рефералам",
-                callback_data="leaders"
             ),
         ],
     ]
