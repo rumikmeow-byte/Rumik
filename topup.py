@@ -9,7 +9,7 @@ TOPUP_OPTIONS = {
 }
 
 # 🎁 КЕЙСЫ
-# Призы кейса за 15 ⭐: 5 (96%), 7 (1%), 15 (1%), 25 (1%), 30 (1%).
+# Призы кейса за 15 ⭐: 5, 7, 15, 25, 30 ⭐.
 CASE_OPTIONS = {
     15: {"prizes": [5, 7, 15, 25, 30], "weights": [96, 1, 1, 1, 1]},
     25: {"small": 10, "medium": 28, "big": 100},
@@ -207,13 +207,7 @@ def register_topup_handlers(dp, bot, db_pool_getter, support_id):
             return
         data = CASE_OPTIONS[price]
         if price == 15:
-            prizes_text = "\n".join([
-                "⭐ 5 звёзд — 96%",
-                "⭐ 7 звёзд — 1%",
-                "⭐ 15 звёзд — 1%",
-                "⭐ 25 звёзд — 1%",
-                "⭐ 30 звёзд — 1%",
-            ])
+            prizes_text = "\n".join(f"⭐ {prize} звёзд" for prize in data["prizes"])
             text = f"🎁 <b>Кейс за 15 ⭐</b>\n━━━━━━━━━━━━━━━━━━━━\n\n<b>Возможные призы:</b>\n{prizes_text}\n\n━━━━━━━━━━━━━━━━━━━━\nНажми кнопку ниже, чтобы открыть кейс."
         else:
             text = (
@@ -240,7 +234,7 @@ def register_topup_handlers(dp, bot, db_pool_getter, support_id):
         prizes = CASE_OPTIONS[price]
         import random
         if price == 15:
-            # Шансы: 5⭐ — 96%, остальные призы — по 1%.
+            # Шансы настроены отдельно, пользователю не показываются.
             prize = random.choices(prizes["prizes"], weights=prizes["weights"], k=1)[0]
         else:
             roll = random.random()
