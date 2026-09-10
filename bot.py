@@ -15,6 +15,8 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from topup import register_topup_handlers
+from aiogram.types import BufferedInputFile
+from menu_photo_data import menu_photo
 
 
 # =========================================================
@@ -33,10 +35,8 @@ SUPPORT_USERNAME = "@Eclipsed_consult"
 MIN_WITHDRAW = 15
 REF_BONUS = 0.85
 
-# Фото главного меню — 768x439
-MENU_PHOTO = (
-    "AgACAgIAAxkBAAEuWDpqmWLboBOFIlHcmgpylNym1rLLIgACSB1rG8qiyEgmn7iMl-EITAEAAwIAA3gAAz0E"
-)
+# Фото главного меню — загружается из загруженного файла
+MENU_PHOTO = BufferedInputFile(menu_photo(), filename="menu.jpg")
 
 # Обязательные каналы/чаты (будут добавлены при первом запуске)
 DEFAULT_REQUIRED = [
