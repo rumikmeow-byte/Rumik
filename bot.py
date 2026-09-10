@@ -17,6 +17,8 @@ from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from topup import register_topup_handlers
 from aiogram.types import BufferedInputFile
 from menu_photo_data import menu_photo
+from aiogram.types import BufferedInputFile
+from menu_photo_data import menu_photo
 
 
 # =========================================================
