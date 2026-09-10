@@ -69,17 +69,11 @@ def _install_giftsmms_ui(dp):
             return
 
         await main.credit_referral_if_needed(user.id)
-        data = await main.get_user_data(user_id)
-        balance = float(data.get("balance", 0))
         name = html.escape(user.first_name or "Helper")
         caption = (
             f"✨ <b>Привет, {name}!</b>\n"
-            "💎 <b>Добро пожаловать в GiftsMMS Bot</b>\n"
-            "━━━━━━━━━━━━━━━━━━━━\n"
-            f"⭐ <b>Твой баланс:</b> <code>{balance:.2f} ⭐</code>\n"
-            "━━━━━━━━━━━━━━━━━━━━\n"
-            "💰 Зарабатывай звёзды за приглашение!\n"
-            "📣 Покупай рекламу и продвигай свой проект!\n"
+            "💎 <b>Добро пожаловать в GiftsMMS !</b>\n"
+            "💰 <b>Зарабатывай звёзды за приглашение!</b>\n"
             "━━━━━━━━━━━━━━━━━━━━\n"
             "⬇️ <b>Выбери раздел:</b>"
         )
