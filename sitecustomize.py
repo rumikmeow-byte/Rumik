@@ -12,9 +12,9 @@ ADS_CONTACT_URL = "https://t.me/huskytelegram"
 
 
 def _install_giftsmms_ui(dp):
-    from aiogram import types
+    from aiogram import types, F
     from aiogram.fsm.state import State, StatesGroup
-    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, FSInputFile
+    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, FSInputFile, ReplyKeyboardMarkup, KeyboardButton
 
     main = sys.modules.get("__main__")
     if main is None or getattr(main, "_GIFTSMMS_UI_INSTALLED", False):
@@ -27,25 +27,18 @@ def _install_giftsmms_ui(dp):
         waiting_for_text = State()
 
     def dark_menu_keyboard(user_id: int):
-        rows = [
-            [
-                InlineKeyboardButton(text="📢 Канал", url="https://t.me/eclipsedlf"),
-                InlineKeyboardButton(text="🆘 Поддержка", url="https://t.me/Eclipsed_consult"),
-                InlineKeyboardButton(text="📣 Купить рекламу", url="https://t.me/huskytelegram"),
+        # Обычная клавиатура Telegram внизу экрана.
+        return ReplyKeyboardMarkup(
+            keyboard=[
+                [KeyboardButton(text="📢 Канал"), KeyboardButton(text="🆘 Поддержка")],
+                [KeyboardButton(text="📣 Купить рекламу")],
+                [KeyboardButton(text="💳 Пополнить баланс"), KeyboardButton(text="💰 Баланс")],
+                [KeyboardButton(text="🎁 Кейсы"), KeyboardButton(text="👥 Рефералы")],
             ],
-            [
-                InlineKeyboardButton(text="💳 Пополнить баланс", callback_data="topup"),
-                InlineKeyboardButton(text="💰 Баланс", callback_data="balance"),
-                InlineKeyboardButton(text="🎁 Кейсы", callback_data="cases"),
-            ],
-            [
-                InlineKeyboardButton(text="👥 Рефералы", callback_data="referrals"),
-            ],
-        ]
-        support_id = getattr(main, "SUPPORT_ID", 0)
-        if user_id == support_id and support_id:
-            rows.append([InlineKeyboardButton(text="⚙️ Админ-панель", callback_data="admin_panel")])
-        return InlineKeyboardMarkup(inline_keyboard=rows)
+            resize_keyboard=True,
+            is_persistent=True,
+            input_field_placeholder="Выберите раздел 👇",
+        )
 
     async def custom_show_menu(target):
         user = target.from_user
@@ -87,86 +80,74 @@ def _install_giftsmms_ui(dp):
         else:
             chat_id = target.chat.id
 
-        try:
-            await bot.send_photo(
-                chat_id=chat_id,
-                photo=FSInputFile(MENU_IMAGE_PATH),
-                caption=caption,
-                reply_markup=dark_menu_keyboard(user.id),
-                parse_mode="HTML",
-            )
-        except Exception as e:
-            main.logger.warning(f"Не удалось отправить новое фото меню: {e}")
-            await bot.send_message(
-                chat_id=chat_id,
-                text=caption,
-                reply_markup=dark_menu_keyboard(user.id),
-                parse_mode="HTML",
-            )
+        # menu_small.jpg удалена: отправляем чистое текстовое меню
+        # с обычной клавиатурой снизу.
+        await bot.send_message(
+            chat_id=chat_id,
+            text=caption,
+            reply_markup=dark_menu_keyboard(user.id),
+            parse_mode="HTML",
+        )
 
     main.show_menu = custom_show_menu
     main.main_menu_keyboard = dark_menu_keyboard
 
-    async def cb_referrals_new(call: types.CallbackQuery):
-        if not await main.require_subscription(call):
-            return
+    # Кнопки ReplyKeyboardMarkup — сообщения, а не callback-кнопки.
+    @dp.message(F.text == "📢 Канал")
+    async def reply_channel(message: types.Message):
+        await message.answer("📢 Наш канал: https://t.me/eclipsedlf")
 
-        user_id = str(call.from_user.id)
-        await main.ensure_user(
-            user_id,
-            call.from_user.username or f"User_{user_id[:6]}",
-            call.from_user.full_name or "",
-        )
+    @dp.message(F.text == "🆘 Поддержка")
+    async def reply_support(message: types.Message):
+        await message.answer("🆘 Поддержка: https://t.me/Eclipsed_consult")
+
+    @dp.message(F.text == "📣 Купить рекламу")
+    async def reply_ads(message: types.Message):
+        await message.answer("📣 Купить рекламу: https://t.me/huskytelegram")
+
+    @dp.message(F.text == "💰 Баланс")
+    async def reply_balance(message: types.Message):
+        data = await main.get_user_data(str(message.from_user.id))
+        balance = float(data.get("balance", 0)) if data else 0
+        await message.answer(f"💰 Ваш баланс: <b>{balance:.2f} ⭐</b>", parse_mode="HTML")
+
+    @dp.message(F.text == "💳 Пополнить баланс")
+    async def reply_topup(message: types.Message):
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🧸 Мишка — 15 ⭐", callback_data="topup:15")],
+            [InlineKeyboardButton(text="🌹 Роза — 25 ⭐", callback_data="topup:25")],
+            [InlineKeyboardButton(text="💎 Алмаз — 100 ⭐", callback_data="topup:100")],
+        ])
+        await message.answer("⭐ <b>Пополнение баланса</b>\n\nВыберите подарок для пополнения:", reply_markup=kb, parse_mode="HTML")
+
+    @dp.message(F.text == "🎁 Кейсы")
+    async def reply_cases(message: types.Message):
+        kb = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🎁 15 ⭐", callback_data="case:15"), InlineKeyboardButton(text="🎁 25 ⭐", callback_data="case:25"), InlineKeyboardButton(text="🎁 50 ⭐", callback_data="case:50")],
+            [InlineKeyboardButton(text="🎁 75 ⭐", callback_data="case:75"), InlineKeyboardButton(text="🎁 100 ⭐", callback_data="case:100"), InlineKeyboardButton(text="🎁 150 ⭐", callback_data="case:150")],
+            [InlineKeyboardButton(text="🎁 250 ⭐", callback_data="case:250"), InlineKeyboardButton(text="🎁 500 ⭐", callback_data="case:500")],
+        ])
+        await message.answer("🎁 <b>Выберите кейс:</b>", reply_markup=kb, parse_mode="HTML")
+
+    @dp.message(F.text == "👥 Рефералы")
+    async def reply_referrals(message: types.Message):
+        user_id = str(message.from_user.id)
+        await main.ensure_user(user_id, message.from_user.username or f"User_{user_id[:6]}", message.from_user.full_name or "")
         me = await bot.get_me()
         ref_link = f"https://t.me/{me.username}?start=ref_{user_id}"
-        share_text = "Приглашай друзей и Зарабатывай звёзды!"
-        share_url = (
-            "https://t.me/share/url?url="
-            + quote(ref_link, safe="")
-            + "&text="
-            + quote(share_text, safe="")
-        )
         data = await main.get_user_data(user_id)
         refs = data.get("refs", 0)
-
         kb = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="📨  ОТПРАВИТЬ ДРУГУ", url=share_url)],
-            [InlineKeyboardButton(text="🔙  НАЗАД В МЕНЮ", callback_data="menu")],
+            [InlineKeyboardButton(text="📨 ОТПРАВИТЬ ДРУГУ", url="https://t.me/share/url?url=" + quote(ref_link, safe="") + "&text=" + quote("Приглашай друзей и Зарабатывай звёзды!", safe=""))],
         ])
-        caption = (
+        await message.answer(
             "👥 <b>Приглашай друзей и Зарабатывай звёзды!</b>\n\n"
-            f"🔗 <b>Твоя реферальная ссылка:</b>\n<code>{html.escape(ref_link)}</code>\n\n"
+            f"🔗 Твоя ссылка:\n<code>{html.escape(ref_link)}</code>\n\n"
             f"⭐ За каждого друга: <b>+{main.REF_BONUS:.2f} ⭐</b>\n"
-            f"👥 Приглашено: <b>{refs}</b>\n\n"
-            "Нажми «📨 ОТПРАВИТЬ ДРУГУ» и выбери друга в Telegram."
+            f"👥 Приглашено: <b>{refs}</b>",
+            reply_markup=kb,
+            parse_mode="HTML",
         )
-        try:
-            await call.message.delete()
-        except Exception:
-            pass
-        try:
-            await bot.send_photo(
-                call.from_user.id,
-                REFERRAL_IMAGE_URL,
-                caption=caption,
-                reply_markup=kb,
-                parse_mode="HTML",
-            )
-        except Exception as e:
-            main.logger.warning(f"Не удалось отправить картинку рефералов: {e}")
-            await bot.send_message(
-                call.from_user.id,
-                caption,
-                reply_markup=kb,
-                parse_mode="HTML",
-            )
-        await call.answer()
-
-    # Replace the original referrals callback with the UI version.
-    for handler in getattr(dp.callback_query, "handlers", []):
-        callback = getattr(handler, "callback", None)
-        if getattr(callback, "__name__", "") == "cb_referrals":
-            handler.callback = cb_referrals_new
 
     async def patched_cmd_start(message: types.Message):
         user_id = str(message.from_user.id)
@@ -194,8 +175,7 @@ def _install_giftsmms_ui(dp):
                         if ref_exists and user_row and user_row["referred_by"] is None:
                             await db.execute(
                                 "UPDATE users SET referred_by = $1 WHERE user_id = $2 AND referred_by IS NULL",
-                                int(ref_id),
-                                int(user_id),
+                                int(ref_id), int(user_id),
                             )
         await custom_show_menu(message)
 
@@ -204,7 +184,7 @@ def _install_giftsmms_ui(dp):
         if getattr(callback, "__name__", "") == "cmd_start":
             handler.callback = patched_cmd_start
 
-    main.logger.info("GiftsMMS UI extension loaded: topup + referrals")
+    main.logger.info("GiftsMMS UI extension loaded: ReplyKeyboardMarkup main menu")
 
 
 def _patch_dispatcher():
