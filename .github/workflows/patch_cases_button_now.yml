@@ -1,4 +1,4 @@
-name: Patch cases button now
+name: Patch bot photo
 
 on:
   push:
@@ -18,16 +18,16 @@ jobs:
 
       - name: Patch bot.py
         run: >-
-          python -c "import base64; from pathlib import Path; p=Path('bot.py'); s=p.read_text(encoding='utf-8'); old=base64.b64decode('ICAgICAgICAjINCT0YDRg9C/0L/QsCAzOiDQoNGD0LvQtdGC0LrQsCDQuCDQktGL0LLQvtC0CiAgICAgICAgWwogICAgICAgICAgICBJbmxpbmVLZXlib2FyZEJ1dHRvbigKICAgICAgICAgICAgICAgIHRleHQ9IvCfjrAg0KDRg9C70LXRgtC60LAiLAogICAgICAgICAgICAgICAgY2FsbGJhY2tfZGF0YT0icm91bGV0dGUiCiAgICAgICAgICAgICksCiAgICAgICAgICAgIElubGluZUtleWJvYXJkQnV0dG9uKAogICAgICAgICAgICAgICAgdGV4dD0i8J+SsyDQktGL0LLQvtC0IiwKICAgICAgICAgICAgICAgIGNhbGxiYWNrX2RhdGE9IndpdGhkcmF3IgogICAgICAgICAgICApLAogICAgICAgIF0s').decode(); new=base64.b64decode('ICAgICAgICAjINCT0YDRg9C/0L/QsCAzOiDQmtC10LnRgdGLLCDQoNGD0LvQtdGC0LrQsCDQuCDQktGL0LLQvtC0CiAgICAgICAgWwogICAgICAgICAgICBJbmxpbmVLZXlib2FyZEJ1dHRvbigKICAgICAgICAgICAgICAgIHRleHQ9IvCfjoEg0JrQtdC50YHRiyIsCiAgICAgICAgICAgICAgICBjYWxsYmFja19kYXRhPSJjYXNlcyIKICAgICAgICAgICAgKSwKICAgICAgICAgICAgSW5saW5lS2V5Ym9hcmRCdXR0b24oCiAgICAgICAgICAgICAgICB0ZXh0PSLwn46wINCg0YPQu9C10YLQutCwIiwKICAgICAgICAgICAgICAgIGNhbGxiYWNrX2RhdGE9InJvdWxldHRlIgogICAgICAgICAgICApLAogICAgICAgICAgICBJbmxpbmVLZXlib2FyZEJ1dHRvbigKICAgICAgICAgICAgICAgIHRleHQ9IvCfkrMg0JLRi9Cy0L7QtCIsCiAgICAgICAgICAgICAgICBjYWxsYmFja19kYXRhPSJ3aXRoZHJhdyIKICAgICAgICAgICAgKSwKICAgICAgICBdLA==').decode(); assert old in s, 'main menu block not found'; p.write_text(s.replace(old,new,1), encoding='utf-8')"
+          python -c "from pathlib import Path; p=Path('bot.py'); s=p.read_text(encoding='utf-8'); s=s.replace('from topup import register_topup_handlers\\n','from topup import register_topup_handlers\\nfrom aiogram.types import BufferedInputFile\\nfrom menu_photo_data import menu_photo\\n',1); start=s.index('# Фото главного меню'); end=s.index('\\n\\n# Обязательные каналы/чаты',start); s=s[:start]+'# Фото главного меню — загружается из загруженного файла\\nMENU_PHOTO = BufferedInputFile(menu_photo(), filename=\\\"menu.jpg\\\")'+s[end:]; p.write_text(s,encoding='utf-8')"
 
       - name: Verify
-        run: python -m py_compile bot.py topup.py
+        run: python -m py_compile bot.py topup.py menu_photo_data.py
 
       - name: Commit patch
         run: |
           if git diff --quiet; then exit 0; fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add bot.py
-          git commit -m "Add cases button directly to main menu"
+          git add bot.py menu_photo_data.py
+          git commit -m "Use uploaded photo in bot main menu"
           git push
