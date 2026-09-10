@@ -2,10 +2,11 @@
 
 import functools
 import html
+import os
 import sys
 from urllib.parse import quote
 
-MENU_IMAGE_URL = "https://raw.githubusercontent.com/rumikmeow-byte/Rumik/main/menu_small.jpg"
+MENU_IMAGE_PATH = os.path.join(os.path.dirname(__file__), "menu_small.jpg")
 REFERRAL_IMAGE_URL = "https://images.weserv.nl/?url=raw.githubusercontent.com/rumikmeow-byte/Rumik/main/assets/referral_card.svg&w=768"
 ADS_CONTACT_URL = "https://t.me/huskytelegram"
 
@@ -13,7 +14,7 @@ ADS_CONTACT_URL = "https://t.me/huskytelegram"
 def _install_giftsmms_ui(dp):
     from aiogram import types
     from aiogram.fsm.state import State, StatesGroup
-    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
+    from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup, FSInputFile
 
     main = sys.modules.get("__main__")
     if main is None or getattr(main, "_GIFTSMMS_UI_INSTALLED", False):
@@ -95,7 +96,7 @@ def _install_giftsmms_ui(dp):
         try:
             await bot.send_photo(
                 chat_id=chat_id,
-                photo=MENU_IMAGE_URL,
+                photo=FSInputFile(MENU_IMAGE_PATH),
                 caption=caption,
                 reply_markup=dark_menu_keyboard(user.id),
                 parse_mode="HTML",
