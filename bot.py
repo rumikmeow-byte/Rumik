@@ -29,6 +29,8 @@ from aiogram.types import BufferedInputFile
 from menu_photo_data import menu_photo
 from aiogram.types import BufferedInputFile
 from menu_photo_data import menu_photo
+from aiogram.types import BufferedInputFile
+from menu_photo_data import menu_photo
 
 
 # =========================================================
