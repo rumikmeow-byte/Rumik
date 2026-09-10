@@ -9,9 +9,9 @@ TOPUP_OPTIONS = {
 }
 
 # 🎁 КЕЙСЫ
-# Шансы намеренно НЕ показываются пользователю.
+# Призы кейса за 15 ⭐: 5, 7, 15, 25, 30 ⭐.
 CASE_OPTIONS = {
-    15: {"small": 5, "medium": 17, "big": 50},
+    15: {"prizes": [5, 7, 15, 25, 30]},
     25: {"small": 10, "medium": 28, "big": 100},
     50: {"small": 20, "medium": 55, "big": 150},
     75: {"small": 30, "medium": 83, "big": 250},
@@ -49,22 +49,14 @@ def topup_admin_keyboard(request_id: int):
 
 
 def cases_keyboard():
-    # Три кейса в ряд: аккуратная «пирамида» 3 + 3 + 2.
     prices = list(CASE_OPTIONS.keys())
     buttons = []
     for i in range(0, len(prices), 3):
-        row = [
-            InlineKeyboardButton(
-                text=f"🎁 {price} ⭐",
-                callback_data=f"case:{price}"
-            )
+        buttons.append([
+            InlineKeyboardButton(text=f"🎁 {price} ⭐", callback_data=f"case:{price}")
             for price in prices[i:i + 3]
-        ]
-        buttons.append(row)
-
-    buttons.append([
-        InlineKeyboardButton(text="🔙 Назад в меню", callback_data="menu")
-    ])
+        ])
+    buttons.append([InlineKeyboardButton(text="🔙 Назад в меню", callback_data="menu")])
     return InlineKeyboardMarkup(inline_keyboard=buttons)
 
 
@@ -77,7 +69,6 @@ def case_open_keyboard(price: int):
 
 
 async def replace_message(call: types.CallbackQuery, text: str, reply_markup):
-    """Главное меню — фото, поэтому edit_text для него падает. Заменяем сообщение новым текстом."""
     try:
         await call.message.delete()
     except Exception:
@@ -104,96 +95,46 @@ def register_topup_handlers(dp, bot, db_pool_getter, support_id):
         key = call.data.split(":", 1)[1]
         if key not in TOPUP_OPTIONS:
             return
-
         amount, gift_name = TOPUP_OPTIONS[key]
         pool = db_pool_getter()
-
         async with pool.acquire() as db:
             existing = await db.fetchrow(
-                """
-                SELECT id FROM topup_requests
-                WHERE user_id = $1 AND status = 'waiting_admin'
-                ORDER BY id DESC LIMIT 1
-                """,
+                "SELECT id FROM topup_requests WHERE user_id = $1 AND status = 'waiting_admin' ORDER BY id DESC LIMIT 1",
                 call.from_user.id,
             )
             if existing:
-                await replace_message(
-                    call,
-                    "⏳ <b>У вас уже есть заявка на проверке.</b>\n\nДождитесь решения администратора.",
-                    topup_menu_keyboard(),
-                )
+                await replace_message(call, "⏳ <b>У вас уже есть заявка на проверке.</b>\n\nДождитесь решения администратора.", topup_menu_keyboard())
                 return
-
             row = await db.fetchrow(
-                """
-                INSERT INTO topup_requests (user_id, username, full_name, amount, gift_name, status)
-                VALUES ($1, $2, $3, $4, $5, 'pending')
-                RETURNING id
-                """,
-                call.from_user.id,
-                call.from_user.username or "",
-                call.from_user.full_name or "",
-                amount,
-                gift_name,
+                "INSERT INTO topup_requests (user_id, username, full_name, amount, gift_name, status) VALUES ($1, $2, $3, $4, $5, 'pending') RETURNING id",
+                call.from_user.id, call.from_user.username or "", call.from_user.full_name or "", amount, gift_name,
             )
-
         await replace_message(
             call,
-            f"🎁 <b>{gift_name}</b> — <b>{amount} ⭐</b>\n\n"
-            "1. Нажмите кнопку ниже.\n"
-            "2. Отправьте выбранный подарок пользователю <b>@HuskyTelegram</b>.\n"
-            "3. Вернитесь в бота и нажмите «Я отправил подарок».\n\n"
-            "⚠️ Заявка администратору отправится только после нажатия этой кнопки.",
+            f"🎁 <b>{gift_name}</b> — <b>{amount} ⭐</b>\n\n1. Нажмите кнопку ниже.\n2. Отправьте выбранный подарок пользователю <b>@HuskyTelegram</b>.\n3. Вернитесь в бота и нажмите «Я отправил подарок».\n\n⚠️ Заявка администратору отправится только после нажатия этой кнопки.",
             topup_payment_keyboard(),
         )
 
     @dp.callback_query(F.data == "topup_sent")
     async def topup_sent(call: types.CallbackQuery):
         pool = db_pool_getter()
-
         async with pool.acquire() as db:
             row = await db.fetchrow(
-                """
-                SELECT * FROM topup_requests
-                WHERE user_id = $1 AND status = 'pending'
-                ORDER BY id DESC
-                LIMIT 1
-                """,
+                "SELECT * FROM topup_requests WHERE user_id = $1 AND status = 'pending' ORDER BY id DESC LIMIT 1",
                 call.from_user.id,
             )
             if not row:
                 await call.answer("Сначала выберите подарок", show_alert=True)
                 return
-
-            await db.execute(
-                "UPDATE topup_requests SET status = 'waiting_admin', updated_at = NOW() WHERE id = $1",
-                row["id"],
-            )
-
+            await db.execute("UPDATE topup_requests SET status = 'waiting_admin', updated_at = NOW() WHERE id = $1", row["id"])
         await call.answer("Заявка отправлена администратору", show_alert=True)
-
         username = f"@{call.from_user.username}" if call.from_user.username else "без username"
         await bot.send_message(
             support_id,
-            f"💳 <b>Новая заявка на пополнение</b>\n\n"
-            f"ID заявки: <code>{row['id']}</code>\n"
-            f"Пользователь: {html_escape(call.from_user.full_name)}\n"
-            f"Username: {html_escape(username)}\n"
-            f"User ID: <code>{call.from_user.id}</code>\n"
-            f"Подарок: <b>{html_escape(row['gift_name'])}</b>\n"
-            f"Сумма: <b>+{row['amount']} ⭐</b>\n\n"
-            "Проверьте подарок, отправленный пользователем в @HuskyTelegram.",
-            parse_mode="HTML",
-            reply_markup=topup_admin_keyboard(row["id"]),
+            f"💳 <b>Новая заявка на пополнение</b>\n\nID заявки: <code>{row['id']}</code>\nПользователь: {html_escape(call.from_user.full_name)}\nUsername: {html_escape(username)}\nUser ID: <code>{call.from_user.id}</code>\nПодарок: <b>{html_escape(row['gift_name'])}</b>\nСумма: <b>+{row['amount']} ⭐</b>\n\nПроверьте подарок, отправленный пользователем в @HuskyTelegram.",
+            parse_mode="HTML", reply_markup=topup_admin_keyboard(row["id"]),
         )
-
-        await replace_message(
-            call,
-            "⏳ <b>Заявка отправлена на проверку.</b>\n\n"
-            "Администратор проверит подарок у @HuskyTelegram и подтвердит или отклонит заявку.",
-            topup_menu_keyboard(),
-        )
+        await replace_message(call, "⏳ <b>Заявка отправлена на проверку.</b>\n\nАдминистратор проверит подарок у @HuskyTelegram и подтвердит или отклонит заявку.", topup_menu_keyboard())
 
     @dp.callback_query(F.data.startswith("topup_approve:"))
     async def approve_topup(call: types.CallbackQuery):
@@ -205,34 +146,17 @@ def register_topup_handlers(dp, bot, db_pool_getter, support_id):
         pool = db_pool_getter()
         async with pool.acquire() as db:
             async with db.transaction():
-                row = await db.fetchrow(
-                    "SELECT * FROM topup_requests WHERE id = $1 FOR UPDATE",
-                    request_id,
-                )
+                row = await db.fetchrow("SELECT * FROM topup_requests WHERE id = $1 FOR UPDATE", request_id)
                 if not row or row["status"] == "approved":
                     await call.message.edit_reply_markup(reply_markup=None)
                     return
                 if row["status"] == "rejected":
                     return
-                await db.execute(
-                    "UPDATE users SET balance = balance + $1 WHERE user_id = $2",
-                    row["amount"], row["user_id"]
-                )
-                await db.execute(
-                    "UPDATE topup_requests SET status = 'approved', updated_at = NOW(), processed_by = $1 WHERE id = $2",
-                    call.from_user.id, request_id
-                )
-
-        await call.message.edit_text(
-            call.message.text + "\n\n✅ <b>Зачислено.</b>",
-            parse_mode="HTML",
-        )
+                await db.execute("UPDATE users SET balance = balance + $1 WHERE user_id = $2", row["amount"], row["user_id"])
+                await db.execute("UPDATE topup_requests SET status = 'approved', updated_at = NOW(), processed_by = $1 WHERE id = $2", call.from_user.id, request_id)
+        await call.message.edit_text(call.message.text + "\n\n✅ <b>Зачислено.</b>", parse_mode="HTML")
         try:
-            await bot.send_message(
-                row["user_id"],
-                f"✅ <b>Пополнение подтверждено!</b>\n\n⭐ На баланс зачислено: <b>+{row['amount']} ⭐</b>",
-                parse_mode="HTML",
-            )
+            await bot.send_message(row["user_id"], f"✅ <b>Пополнение подтверждено!</b>\n\n⭐ На баланс зачислено: <b>+{row['amount']} ⭐</b>", parse_mode="HTML")
         except Exception:
             pass
 
@@ -245,27 +169,13 @@ def register_topup_handlers(dp, bot, db_pool_getter, support_id):
         request_id = int(call.data.split(":", 1)[1])
         pool = db_pool_getter()
         async with pool.acquire() as db:
-            row = await db.fetchrow(
-                "SELECT * FROM topup_requests WHERE id = $1",
-                request_id,
-            )
+            row = await db.fetchrow("SELECT * FROM topup_requests WHERE id = $1", request_id)
             if not row or row["status"] in ("approved", "rejected"):
                 return
-            await db.execute(
-                "UPDATE topup_requests SET status = 'rejected', updated_at = NOW(), processed_by = $1 WHERE id = $2",
-                call.from_user.id, request_id,
-            )
-
-        await call.message.edit_text(
-            call.message.text + "\n\n❌ <b>Отклонено.</b>",
-            parse_mode="HTML",
-        )
+            await db.execute("UPDATE topup_requests SET status = 'rejected', updated_at = NOW(), processed_by = $1 WHERE id = $2", call.from_user.id, request_id)
+        await call.message.edit_text(call.message.text + "\n\n❌ <b>Отклонено.</b>", parse_mode="HTML")
         try:
-            await bot.send_message(
-                row["user_id"],
-                "❌ <b>Заявка на пополнение отклонена.</b>",
-                parse_mode="HTML",
-            )
+            await bot.send_message(row["user_id"], "❌ <b>Заявка на пополнение отклонена.</b>", parse_mode="HTML")
         except Exception:
             pass
 
@@ -295,17 +205,18 @@ def register_topup_handlers(dp, bot, db_pool_getter, support_id):
         if price not in CASE_OPTIONS:
             await call.answer("Такого кейса нет", show_alert=True)
             return
-
         data = CASE_OPTIONS[price]
-        text = (
-            f"🎁 <b>Кейс за {price} ⭐</b>\n"
-            "━━━━━━━━━━━━━━━━━━━━\n\n"
-            f"🪙 Обычный приз: <b>{data['small']} ⭐</b>\n"
-            f"✨ Средний приз: <b>{data['medium']} ⭐</b>\n"
-            f"💎 Большой приз: <b>{data['big']} ⭐</b>\n\n"
-            "━━━━━━━━━━━━━━━━━━━━\n"
-            "Нажми кнопку ниже, чтобы открыть кейс."
-        )
+        if price == 15:
+            prizes_text = "\n".join(f"⭐ {prize} звёзд" for prize in data["prizes"])
+            text = f"🎁 <b>Кейс за 15 ⭐</b>\n━━━━━━━━━━━━━━━━━━━━\n\n<b>Возможные призы:</b>\n{prizes_text}\n\n━━━━━━━━━━━━━━━━━━━━\nНажми кнопку ниже, чтобы открыть кейс."
+        else:
+            text = (
+                f"🎁 <b>Кейс за {price} ⭐</b>\n━━━━━━━━━━━━━━━━━━━━\n\n"
+                f"🪙 Обычный приз: <b>{data['small']} ⭐</b>\n"
+                f"✨ Средний приз: <b>{data['medium']} ⭐</b>\n"
+                f"💎 Большой приз: <b>{data['big']} ⭐</b>\n\n"
+                "━━━━━━━━━━━━━━━━━━━━\nНажми кнопку ниже, чтобы открыть кейс."
+            )
         await call.answer()
         await replace_message(call, text, case_open_keyboard(price))
 
@@ -316,113 +227,41 @@ def register_topup_handlers(dp, bot, db_pool_getter, support_id):
         except (ValueError, IndexError):
             await call.answer("Ошибка кейса", show_alert=True)
             return
-
         if price not in CASE_OPTIONS:
             await call.answer("Такого кейса нет", show_alert=True)
             return
-
         pool = db_pool_getter()
         prizes = CASE_OPTIONS[price]
-
-        # 70% малый, 20% средний, 10% большой.
         import random
-        roll = random.random()
-        if roll < 0.70:
-            prize = prizes["small"]
-        elif roll < 0.90:
-            prize = prizes["medium"]
+        if price == 15:
+            # Равный шанс на каждый из 5 призов.
+            prize = random.choice(prizes["prizes"])
         else:
-            prize = prizes["big"]
-
+            roll = random.random()
+            if roll < 0.70:
+                prize = prizes["small"]
+            elif roll < 0.90:
+                prize = prizes["medium"]
+            else:
+                prize = prizes["big"]
         async with pool.acquire() as db:
             async with db.transaction():
-                row = await db.fetchrow(
-                    "SELECT balance FROM users WHERE user_id = $1 FOR UPDATE",
-                    call.from_user.id,
-                )
+                row = await db.fetchrow("SELECT balance FROM users WHERE user_id = $1 FOR UPDATE", call.from_user.id)
                 balance = float(row["balance"]) if row else 0.0
-
                 if balance < price:
-                    await call.answer(
-                        f"❌ Недостаточно ⭐. Нужно {price} ⭐",
-                        show_alert=True,
-                    )
+                    await call.answer(f"❌ Недостаточно ⭐. Нужно {price} ⭐", show_alert=True)
                     return
-
-                await db.execute(
-                    "UPDATE users SET balance = balance - $1 + $2 WHERE user_id = $3",
-                    price,
-                    prize,
-                    call.from_user.id,
-                )
-
-        new_data = await pool.fetchrow(
-            "SELECT balance FROM users WHERE user_id = $1",
-            call.from_user.id,
-        )
+                await db.execute("UPDATE users SET balance = balance - $1 + $2 WHERE user_id = $3", price, prize, call.from_user.id)
+        new_data = await pool.fetchrow("SELECT balance FROM users WHERE user_id = $1", call.from_user.id)
         new_balance = float(new_data["balance"]) if new_data else 0.0
-
-        if prize >= prizes["big"]:
-            result_title = "💎 ДЖЕКПОТ!"
-        elif prize >= prizes["medium"]:
-            result_title = "✨ КРУПНЫЙ ВЫИГРЫШ!"
-        else:
-            result_title = "🎁 ВЫИГРЫШ!"
-
-        text = (
-            f"🎁 <b>КЕЙС ЗА {price} ⭐</b>\n"
-            "━━━━━━━━━━━━━━━━━━━━\n\n"
-            f"{result_title}\n\n"
-            f"⭐ Ты получил: <b>+{prize} ⭐</b>\n"
-            f"💰 Баланс: <code>{new_balance:.2f} ⭐</code>\n\n"
-            "━━━━━━━━━━━━━━━━━━━━\n"
-            "🎉 Попробуешь ещё раз?"
+        await call.answer(f"🎉 Вы выиграли {prize} ⭐!", show_alert=True)
+        await replace_message(
+            call,
+            f"🎉 <b>Кейс открыт!</b>\n\n🎁 Кейс: <b>{price} ⭐</b>\n⭐ Ваш приз: <b>{prize} ⭐</b>\n💰 Баланс: <b>{new_balance:.2f} ⭐</b>",
+            case_open_keyboard(price),
         )
 
-        await call.answer(f"🎉 +{prize} ⭐")
-        await replace_message(call, text, InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text=f"🎁 Ещё кейс за {price} ⭐", callback_data=f"case:{price}")],
-            [InlineKeyboardButton(text="🎁 Все кейсы", callback_data="cases")],
-            [InlineKeyboardButton(text="🏠 В меню", callback_data="menu")],
-        ]))
 
-    # Надёжно добавляем «Кейсы» в клавиатуру главного меню непосредственно
-    # перед отправкой фото. Это не зависит от порядка объявления main_menu_keyboard.
-    original_send_photo = bot.send_photo
-
-    async def send_photo_with_cases(*args, **kwargs):
-        keyboard = kwargs.get("reply_markup")
-        if keyboard is not None and hasattr(keyboard, "inline_keyboard"):
-            rows = keyboard.inline_keyboard
-            has_cases = any(
-                button.callback_data == "cases"
-                for row in rows
-                for button in row
-                if getattr(button, "callback_data", None)
-            )
-            has_roulette = any(
-                button.callback_data == "roulette"
-                for row in rows
-                for button in row
-                if getattr(button, "callback_data", None)
-            )
-            if has_roulette and not has_cases:
-                new_rows = []
-                for row in rows:
-                    if any(getattr(button, "callback_data", None) == "roulette" for button in row):
-                        new_rows.append([
-                            InlineKeyboardButton(text="🎁 Кейсы", callback_data="cases"),
-                            InlineKeyboardButton(text="🎰 Рулетка", callback_data="roulette"),
-                            InlineKeyboardButton(text="💳 Вывод", callback_data="withdraw"),
-                        ])
-                    else:
-                        new_rows.append(row)
-                keyboard.inline_keyboard = new_rows
-        return await original_send_photo(*args, **kwargs)
-
-    bot.send_photo = send_photo_with_cases
-
-
-def html_escape(value):
+def html_escape(value: str) -> str:
     import html
-    return html.escape(str(value or ""))
+    return html.escape(value or "")
