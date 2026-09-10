@@ -7,7 +7,7 @@ from urllib.parse import quote
 
 MENU_IMAGE_URL = "https://images.weserv.nl/?url=raw.githubusercontent.com/rumikmeow-byte/Rumik/main/assets/menu_logo.svg&w=768"
 REFERRAL_IMAGE_URL = "https://images.weserv.nl/?url=raw.githubusercontent.com/rumikmeow-byte/Rumik/main/assets/referral_card.svg&w=768"
-ADS_CONTACT_URL = "https://t.me/HuskyTelegram"
+ADS_CONTACT_URL = "https://t.me/huskytelegram"
 
 
 def _install_giftsmms_ui(dp):
@@ -28,21 +28,22 @@ def _install_giftsmms_ui(dp):
     def dark_menu_keyboard(user_id: int):
         rows = [
             [
-                InlineKeyboardButton(text="📢  КАНАЛ", url="https://t.me/eclipsedlf"),
-                InlineKeyboardButton(text="💬  ПОДДЕРЖКА", url="https://t.me/Eclipsed_consult"),
+                InlineKeyboardButton(text="📢 Канал", url="https://t.me/eclipsedlf"),
+                InlineKeyboardButton(text="🆘 Поддержка", url="https://t.me/Eclipsed_consult"),
+                InlineKeyboardButton(text="📣 Купить рекламу", url="https://t.me/huskytelegram"),
             ],
-            [InlineKeyboardButton(text="⭐  ПОПОЛНИТЬ БАЛАНС", callback_data="topup")],
-            [InlineKeyboardButton(text="💰  БАЛАНС", callback_data="balance")],
-            [InlineKeyboardButton(text="🎁  РЕФЕРАЛЫ", callback_data="referrals")],
             [
-                InlineKeyboardButton(text="🎰  РУЛЕТКА", callback_data="roulette"),
-                InlineKeyboardButton(text="💳  ВЫВОД", callback_data="withdraw"),
+                InlineKeyboardButton(text="💳 Пополнить баланс", callback_data="topup"),
+                InlineKeyboardButton(text="💰 Баланс", callback_data="balance"),
+                InlineKeyboardButton(text="🎁 Кейсы", callback_data="cases"),
             ],
-            [InlineKeyboardButton(text="📣  КУПИТЬ РЕКЛАМУ", url=ADS_CONTACT_URL)],
+            [
+                InlineKeyboardButton(text="👥 Рефералы", callback_data="referrals"),
+            ],
         ]
         support_id = getattr(main, "SUPPORT_ID", 0)
         if user_id == support_id and support_id:
-            rows.append([InlineKeyboardButton(text="⚙️  АДМИН-ПАНЕЛЬ", callback_data="admin_panel")])
+            rows.append([InlineKeyboardButton(text="⚙️ Админ-панель", callback_data="admin_panel")])
         return InlineKeyboardMarkup(inline_keyboard=rows)
 
     async def custom_show_menu(target):
