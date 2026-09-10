@@ -5,7 +5,7 @@ import html
 import sys
 from urllib.parse import quote
 
-MENU_IMAGE_URL = "https://images.weserv.nl/?url=raw.githubusercontent.com/rumikmeow-byte/Rumik/main/assets/menu_logo.svg&w=768"
+MENU_IMAGE_URL = "https://raw.githubusercontent.com/rumikmeow-byte/Rumik/main/menu_small.jpg"
 REFERRAL_IMAGE_URL = "https://images.weserv.nl/?url=raw.githubusercontent.com/rumikmeow-byte/Rumik/main/assets/referral_card.svg&w=768"
 ADS_CONTACT_URL = "https://t.me/huskytelegram"
 
