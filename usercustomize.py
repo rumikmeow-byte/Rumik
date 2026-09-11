@@ -58,9 +58,9 @@ def _install_gate():
                         [InlineKeyboardButton(text="✅ Проверить подписку", callback_data="check_sub")],
                     ])
                     message = (
-                        "🔒 <b>Доступ закрыт</b>\n\n"
-                        "Чтобы пользоваться ботом, подпишитесь на канал и вступите в чат.\n\n"
-                        "После этого нажмите «✅ Проверить подписку»."
+                        "🔐 <b>ДОСТУП ОГРАНИЧЕН</b>\n\n"
+                        "Чтобы пользоваться GiftsMMS, подпишитесь на канал и вступите в чат.\n\n"
+                        "✦ После этого нажмите «✅ Проверить подписку»."
                     )
                     try:
                         if callback_data is not None and hasattr(event, "answer"):
@@ -85,3 +85,10 @@ def _install_gate():
 
 
 _install_gate()
+
+# The premium visual layer is isolated from business logic and loaded after the gate.
+try:
+    import premium_ui
+    premium_ui.install()
+except Exception:
+    pass
