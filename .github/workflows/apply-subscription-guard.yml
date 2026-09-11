@@ -1,0 +1,139 @@
+name: Apply global subscription guard
+
+on:
+  push:
+    branches:
+      - feature/global-subscription-guard
+    paths:
+      - '.github/workflows/apply-subscription-guard.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  patch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Patch bot.py
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path('bot.py')
+          text = path.read_text(encoding='utf-8')
+
+          if 'class SubscriptionGuardMiddleware(BaseMiddleware):' in text:
+              print('Subscription guard already present; nothing to do.')
+              raise SystemExit(0)
+
+          old_import = 'from aiogram import Bot, Dispatcher, F, types\n'
+          new_import = old_import + 'from aiogram import BaseMiddleware\n'
+          if old_import not in text:
+              raise SystemExit('Could not find aiogram import line')
+          text = text.replace(old_import, new_import, 1)
+
+          old_button = '''        InlineKeyboardButton(\n            text="✨ Проверить подписку",\n            callback_data="check_sub"\n        )'''
+          new_button = '''        InlineKeyboardButton(\n            text="✅ Проверить подписку",\n            callback_data="check_sub"\n        )'''
+          if old_button not in text:
+              raise SystemExit('Could not find subscription check button')
+          text = text.replace(old_button, new_button, 1)
+
+          marker = '''# =========================================================\n# ГЛАВНОЕ МЕНЮ\n# =========================================================\n'''
+          if marker not in text:
+              raise SystemExit('Could not find main menu marker')
+
+          middleware = r'''# =========================================================
+# ГЛОБАЛЬНАЯ ПРОВЕРКА ПОДПИСКИ
+# =========================================================
+
+class SubscriptionGuardMiddleware(BaseMiddleware):
+    """Блокирует все действия пользователя, если он отписался."""
+
+    async def __call__(self, handler, event, data):
+        user = getattr(event, "from_user", None)
+        if not user:
+            return await handler(event, data)
+
+        user_id = user.id
+
+        if SUPPORT_ID and user_id == SUPPORT_ID:
+            return await handler(event, data)
+
+        if isinstance(event, types.Message):
+            text = (event.text or "").strip()
+            if text.startswith("/start") or text.startswith("/menu"):
+                return await handler(event, data)
+
+        if isinstance(event, types.CallbackQuery) and event.data == "check_sub":
+            return await handler(event, data)
+
+        try:
+            subscribed = await check_subscription(user_id)
+        except Exception:
+            logger.exception(
+                "Ошибка глобальной проверки подписки для user_id=%s",
+                user_id,
+            )
+            subscribed = False
+
+        if subscribed:
+            return await handler(event, data)
+
+        keyboard = await subscription_keyboard()
+        text = (
+            "🔒 <b>ДОСТУП ЗАКРЫТ</b>\n\n"
+            "Чтобы пользоваться <b>GiftsMMS</b>, подпишитесь на все "
+            "обязательные каналы и затем нажмите:\n\n"
+            "✅ <b>Проверить подписку</b>"
+        )
+
+        if isinstance(event, types.CallbackQuery):
+            await event.answer(
+                "🔒 Сначала подпишитесь на обязательные каналы.",
+                show_alert=True,
+            )
+            if event.message:
+                try:
+                    await event.message.answer(
+                        text,
+                        reply_markup=keyboard,
+                        parse_mode="HTML",
+                    )
+                except Exception:
+                    pass
+        elif isinstance(event, types.Message):
+            await event.answer(
+                text,
+                reply_markup=keyboard,
+                parse_mode="HTML",
+            )
+
+        return None
+
+
+# Применяется ко всем message/callback handlers,
+# включая topup.py и FSM-состояния.
+dp.message.outer_middleware(SubscriptionGuardMiddleware())
+dp.callback_query.outer_middleware(SubscriptionGuardMiddleware())
+
+
+'''
+          text = text.replace(marker, middleware + marker, 1)
+
+          path.write_text(text, encoding='utf-8')
+          print('bot.py patched successfully')
+          PY
+
+      - name: Validate syntax
+        run: python -m py_compile bot.py
+
+      - name: Commit patched bot.py
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add bot.py
+          git diff --cached --quiet && echo 'No changes to commit.' || git commit -m 'feat: add global Telegram subscription guard'
+          git push
