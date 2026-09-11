@@ -12,10 +12,10 @@ app.REF_BONUS = 0.50
 def simple_menu_keyboard(user_id: int, support_id=None) -> InlineKeyboardMarkup:
     support_id = app.SUPPORT_ID if support_id is None else support_id
     rows = [
-        [InlineKeyboardButton(text="👥 Реферал", callback_data="referrals")],
+        [InlineKeyboardButton(text="👥 Рефералы", callback_data="referrals")],
+        [InlineKeyboardButton(text="💰 Баланс", callback_data="balance")],
+        [InlineKeyboardButton(text="🛒 Купить рекламу", callback_data="buy_ads")],
         [InlineKeyboardButton(text="💸 Вывод", callback_data="withdraw")],
-        [InlineKeyboardButton(text="👤 Профиль", callback_data="profile")],
-        [InlineKeyboardButton(text="📢 Канал", url="https://t.me/eclipsedlf")],
     ]
     if user_id == support_id and support_id:
         rows.append([InlineKeyboardButton(text="⚙️ Админ-панель", callback_data="admin_panel")])
@@ -61,6 +61,26 @@ async def profile_callback(call: types.CallbackQuery):
     await app.bot.send_message(
         call.from_user.id,
         text,
+        reply_markup=app.back_keyboard(),
+        parse_mode="HTML",
+    )
+    await call.answer()
+
+
+@app.dp.callback_query(F.data == "buy_ads")
+async def buy_ads_callback(call: types.CallbackQuery):
+    if not await app.require_subscription(call):
+        return
+
+    try:
+        await call.message.delete()
+    except Exception:
+        pass
+
+    await app.bot.send_message(
+        call.from_user.id,
+        "🛒 <b>Покупка рекламы</b>\n\n"
+        "Для размещения рекламы напишите администратору: @Eclipsed_consult",
         reply_markup=app.back_keyboard(),
         parse_mode="HTML",
     )
