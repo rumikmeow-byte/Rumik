@@ -1,14 +1,14 @@
-name: Add cases button to main menu
+name: Apply subscription guard patch
 
 on:
   push:
-    branches: [main]
+    branches: [feature/global-subscription-guard]
 
 permissions:
   contents: write
 
 jobs:
-  patch-main-menu:
+  patch-subscription-guard:
     if: github.actor != 'github-actions[bot]'
     runs-on: ubuntu-latest
     steps:
@@ -17,7 +17,7 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Patch main menu
+      - name: Patch bot.py
         run: |
           python - <<'PY'
           from pathlib import Path
@@ -25,51 +25,117 @@ jobs:
           path = Path('bot.py')
           text = path.read_text(encoding='utf-8')
 
-          old = '''        # Группа 3: Рулетка и Вывод
-        [
-            InlineKeyboardButton(
-                text="🎰 Рулетка",
-                callback_data="roulette"
-            ),
-            InlineKeyboardButton(
-                text="💳 Вывод",
-                callback_data="withdraw"
-            ),
-        ],'''
+          if 'class SubscriptionGuardMiddleware(BaseMiddleware):' in text:
+              print('Subscription guard already present; nothing to do.')
+              raise SystemExit(0)
 
-          new = '''        # Группа 3: Кейсы, Рулетка и Вывод
-        [
-            InlineKeyboardButton(
-                text="🎁 Кейсы",
-                callback_data="cases"
-            ),
-            InlineKeyboardButton(
-                text="🎰 Рулетка",
-                callback_data="roulette"
-            ),
-            InlineKeyboardButton(
-                text="💳 Вывод",
-                callback_data="withdraw"
-            ),
-        ],'''
+          old_import = 'from aiogram import Bot, Dispatcher, F, types\n'
+          new_import = old_import + 'from aiogram import BaseMiddleware\n'
+          if old_import not in text:
+              raise SystemExit('Could not find aiogram import line')
+          text = text.replace(old_import, new_import, 1)
 
-          if 'callback_data="cases"' in text and 'text="🎁 Кейсы"' in text:
-              print('Cases button already present; nothing to change.')
-          elif old not in text:
-              raise SystemExit('Expected main menu block was not found; refusing to modify bot.py.')
-          else:
-              path.write_text(text.replace(old, new, 1), encoding='utf-8')
-              print('Cases button added directly to main_menu_keyboard.')
+          old_button = '''        InlineKeyboardButton(\n            text="✨ Проверить подписку",\n            callback_data="check_sub"\n        )'''
+          new_button = '''        InlineKeyboardButton(\n            text="✅ Проверить подписку",\n            callback_data="check_sub"\n        )'''
+          if old_button not in text:
+              raise SystemExit('Could not find subscription check button')
+          text = text.replace(old_button, new_button, 1)
+
+          marker = '''# =========================================================\n# ГЛАВНОЕ МЕНЮ\n# =========================================================\n'''
+          if marker not in text:
+              raise SystemExit('Could not find main menu marker')
+
+          middleware = r'''# =========================================================
+# ГЛОБАЛЬНАЯ ПРОВЕРКА ПОДПИСКИ
+# =========================================================
+
+class SubscriptionGuardMiddleware(BaseMiddleware):
+    """Блокирует все действия пользователя, если он отписался."""
+
+    async def __call__(self, handler, event, data):
+        user = getattr(event, "from_user", None)
+        if not user:
+            return await handler(event, data)
+
+        user_id = user.id
+
+        if SUPPORT_ID and user_id == SUPPORT_ID:
+            return await handler(event, data)
+
+        if isinstance(event, types.Message):
+            text = (event.text or "").strip()
+            if text.startswith("/start") or text.startswith("/menu"):
+                return await handler(event, data)
+
+        if isinstance(event, types.CallbackQuery) and event.data == "check_sub":
+            return await handler(event, data)
+
+        try:
+            subscribed = await check_subscription(user_id)
+        except Exception:
+            logger.exception(
+                "Ошибка глобальной проверки подписки для user_id=%s",
+                user_id,
+            )
+            subscribed = False
+
+        if subscribed:
+            return await handler(event, data)
+
+        keyboard = await subscription_keyboard()
+        text = (
+            "🔒 <b>ДОСТУП ЗАКРЫТ</b>\n\n"
+            "Чтобы пользоваться <b>GiftsMMS</b>, подпишитесь на все "
+            "обязательные каналы и затем нажмите:\n\n"
+            "✅ <b>Проверить подписку</b>"
+        )
+
+        if isinstance(event, types.CallbackQuery):
+            await event.answer(
+                "🔒 Сначала подпишитесь на обязательные каналы.",
+                show_alert=True,
+            )
+            if event.message:
+                try:
+                    await event.message.answer(
+                        text,
+                        reply_markup=keyboard,
+                        parse_mode="HTML",
+                    )
+                except Exception:
+                    pass
+        elif isinstance(event, types.Message):
+            await event.answer(
+                text,
+                reply_markup=keyboard,
+                parse_mode="HTML",
+            )
+
+        return None
+
+
+dp.message.outer_middleware(SubscriptionGuardMiddleware())
+dp.callback_query.outer_middleware(SubscriptionGuardMiddleware())
+
+
+'''
+          text = text.replace(marker, middleware + marker, 1)
+
+          path.write_text(text, encoding='utf-8')
+          print('bot.py patched successfully')
           PY
+
+      - name: Validate syntax
+        run: python -m py_compile bot.py topup.py
 
       - name: Commit and push
         run: |
-          if git diff --quiet; then
-            echo "No changes to commit."
-            exit 0
-          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add bot.py
-          git commit -m "Add cases button directly to main menu"
+          if git diff --cached --quiet; then
+            echo "No changes to commit."
+            exit 0
+          fi
+          git commit -m "feat: add global Telegram subscription guard"
           git push
