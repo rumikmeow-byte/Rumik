@@ -17,41 +17,45 @@ jobs:
         run: |
           python - <<'PY'
           from pathlib import Path
+          import re
 
           p = Path('bot.py')
           s = p.read_text(encoding='utf-8')
 
-          s = s.replace('MIN_WITHDRAW = 15', 'MIN_WITHDRAW = 25')
-          s = s.replace('REF_BONUS = 0.85', 'REF_BONUS = 2')
+          s = re.sub(r'^MIN_WITHDRAW\s*=.*$', 'MIN_WITHDRAW = 25', s, count=1, flags=re.M)
+          s = re.sub(r'^REF_BONUS\s*=.*$', 'REF_BONUS = 2', s, count=1, flags=re.M)
 
-          old = '''DEFAULT_REQUIRED = [\n    {"chat_id": "@eclipsedlf", "title": "Канал"},\n    {"chat_id": "@GiftsEzzChat", "title": "Чат"},\n]'''
-          new = '''DEFAULT_REQUIRED = [\n    {"chat_id": "@Xoylis", "title": "Основной канал"},\n]'''
-          if old not in s:
-              raise SystemExit('DEFAULT_REQUIRED block not found')
+          s = re.sub(
+              r'DEFAULT_REQUIRED\s*=\s*\[.*?\n\]\n',
+              'DEFAULT_REQUIRED = [\n    {"chat_id": "@Xoylis", "title": "Основной канал"},\n]\n',
+              s, count=1, flags=re.S
+          )
+
+          start = s.find('    # Группы кнопок\n    buttons = [')
+          if start == -1:
+              start = s.find('    # Основное меню: только Рефералы, Баланс и Вывод\n    buttons = [')
+          if start != -1:
+              end_marker = '\n\n    # Если админ – добавляем админ-панель'
+              end = s.find(end_marker, start)
+              if end != -1:
+                  menu = '''    # Основное меню: только Рефералы, Баланс и Вывод\n    buttons = [\n        [\n            InlineKeyboardButton(\n                text="🎁 Рефералы",\n                callback_data="referrals"\n            ),\n        ],\n        [\n            InlineKeyboardButton(\n                text="💰 Баланс",\n                callback_data="balance"\n            ),\n        ],\n        [\n            InlineKeyboardButton(\n                text="💳 Вывод от 25 ⭐",\n                callback_data="withdraw"\n            ),\n        ],\n    ]'''
+                  s = s[:start] + menu + s[end:]
+
+          old = 'async def balance_callback(call: types.CallbackQuery):\n    data = await get_user_data(str(call.from_user.id))'
+          new = 'async def balance_callback(call: types.CallbackQuery):\n    if not await require_subscription(call):\n        return\n    data = await get_user_data(str(call.from_user.id))'
           s = s.replace(old, new, 1)
 
-          old_menu = '''    # Группы кнопок\n    buttons = [\n        # Группа 1: Канал и Поддержка\n        [\n            InlineKeyboardButton(\n                text="📢 Канал",\n                url="https://t.me/eclipsedlf"\n            ),\n            InlineKeyboardButton(\n                text="💬 Поддержка",\n                url="https://t.me/Eclipsed_consult"\n            ),\n        ],\n        # Группа 2: Пополнение баланса\n        [\n            InlineKeyboardButton(\n                text="⭐ Пополнить баланс",\n                callback_data="topup"\n            ),\n        ],\n        [\n            InlineKeyboardButton(\n                text="💰 Баланс",\n                callback_data="balance"\n            ),\n        ],\n        # Группа 3: Рефералы\n        [\n            InlineKeyboardButton(\n                text="🎁 Рефералы",\n                callback_data="referrals"\n            ),\n        ],\n        # Группа 3: Кейсы, Рулетка и Вывод\n        [\n            InlineKeyboardButton(\n                text="🎁 Кейсы",\n                callback_data="cases"\n            ),\n            InlineKeyboardButton(\n                text="🎰 Рулетка",\n                callback_data="roulette"\n            ),\n            InlineKeyboardButton(\n                text="💳 Вывод",\n                callback_data="withdraw"\n            ),\n        ],\n    ]'''
-          new_menu = '''    # Основное меню: только Рефералы, Баланс и Вывод\n    buttons = [\n        [\n            InlineKeyboardButton(\n                text="🎁 Рефералы",\n                callback_data="referrals"\n            ),\n        ],\n        [\n            InlineKeyboardButton(\n                text="💰 Баланс",\n                callback_data="balance"\n            ),\n        ],\n        [\n            InlineKeyboardButton(\n                text="💳 Вывод от 25 ⭐",\n                callback_data="withdraw"\n            ),\n        ],\n    ]'''
-          if old_menu not in s:
-              raise SystemExit('main menu block not found')
-          s = s.replace(old_menu, new_menu, 1)
-
-          old_balance = '''async def balance_callback(call: types.CallbackQuery):\n    data = await get_user_data(str(call.from_user.id))'''
-          new_balance = '''async def balance_callback(call: types.CallbackQuery):\n    if not await require_subscription(call):\n        return\n    data = await get_user_data(str(call.from_user.id))'''
-          if old_balance not in s:
-              raise SystemExit('balance handler not found')
-          s = s.replace(old_balance, new_balance, 1)
-
-          # Make the displayed referral bonus text clear and consistent.
           s = s.replace('подписки друга на все каналы!', 'подписки друга на основной канал!')
           s = s.replace('(пользователь подписался на все каналы)', '(пользователь подписался на основной канал)')
 
           p.write_text(s, encoding='utf-8')
           PY
+      - name: Validate bot.py
+        run: python -m py_compile bot.py
       - name: Commit changes
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
           git add bot.py
-          git diff --cached --quiet || git commit -m 'Update bot referral and subscription settings'
+          git diff --cached --quiet || git commit -m 'Configure referral bonus, withdrawal minimum and required channel'
           git push
