@@ -72,16 +72,15 @@ SUPPORT_ID = int(os.getenv("SUPPORT_ID", "0"))
 
 SUPPORT_USERNAME = "@Eclipsed_consult"
 
-MIN_WITHDRAW = 15
-REF_BONUS = 0.85
+MIN_WITHDRAW = 25
+REF_BONUS = 2
 
 # Фото главного меню — загружается из загруженного файла
 MENU_PHOTO = BufferedInputFile(menu_photo(), filename="menu.jpg")
 
 # Обязательные каналы/чаты (будут добавлены при первом запуске)
 DEFAULT_REQUIRED = [
-    {"chat_id": "@eclipsedlf", "title": "Канал"},
-    {"chat_id": "@GiftsEzzChat", "title": "Чат"},
+    {"chat_id": "@Xoylis", "title": "Основной канал"},
 ]
 
 
@@ -102,6 +101,8 @@ register_topup_handlers(dp, bot, lambda: db_pool, SUPPORT_ID)
 # BALANCE_BUTTON_V1
 @dp.callback_query(F.data == "balance")
 async def balance_callback(call: types.CallbackQuery):
+    if not await require_subscription(call):
+        return
     data = await get_user_data(str(call.from_user.id))
     balance = data.get("balance", 0) if data else 0
     await call.answer(f"Ваш баланс: {balance} ⭐", show_alert=True)
@@ -241,11 +242,12 @@ async def init_db():
             ON withdrawals(status)
         """)
 
+        await db.execute("DELETE FROM required_chats WHERE chat_id <> '@Xoylis'")
         for chat in DEFAULT_REQUIRED:
             await db.execute("""
                 INSERT INTO required_chats (chat_id, title)
                 VALUES ($1, $2)
-                ON CONFLICT (chat_id) DO NOTHING
+                ON CONFLICT (chat_id) DO UPDATE SET title = EXCLUDED.title
             """, chat["chat_id"], chat["title"])
 
     logger.info("PostgreSQL успешно подключён!")
@@ -362,7 +364,7 @@ async def credit_referral_if_needed(user_id: int):
             ref_id,
             f"🎉 <b>Новый реферал!</b>\n\n"
             f"⭐ Вам начислено <b>+{REF_BONUS:.2f} ⭐</b>\n"
-            f"(пользователь подписался на все каналы)",
+            f"(пользователь подписался на основной канал)",
             parse_mode="HTML"
         )
     except Exception:
@@ -460,24 +462,12 @@ def main_menu_keyboard(
     if support_id is None:
         support_id = SUPPORT_ID
 
-    # Группы кнопок
+    # Основное меню: только Рефералы, Баланс и Вывод
     buttons = [
-        # Группа 1: Канал и Поддержка
         [
             InlineKeyboardButton(
-                text="📢 Канал",
-                url="https://t.me/eclipsedlf"
-            ),
-            InlineKeyboardButton(
-                text="💬 Поддержка",
-                url="https://t.me/Eclipsed_consult"
-            ),
-        ],
-        # Группа 2: Пополнение баланса
-        [
-            InlineKeyboardButton(
-                text="⭐ Пополнить баланс",
-                callback_data="topup"
+                text="🎁 Рефералы",
+                callback_data="referrals"
             ),
         ],
         [
@@ -486,25 +476,9 @@ def main_menu_keyboard(
                 callback_data="balance"
             ),
         ],
-        # Группа 3: Рефералы
         [
             InlineKeyboardButton(
-                text="🎁 Рефералы",
-                callback_data="referrals"
-            ),
-        ],
-        # Группа 3: Кейсы, Рулетка и Вывод
-        [
-            InlineKeyboardButton(
-                text="🎁 Кейсы",
-                callback_data="cases"
-            ),
-            InlineKeyboardButton(
-                text="🎰 Рулетка",
-                callback_data="roulette"
-            ),
-            InlineKeyboardButton(
-                text="💳 Вывод",
+                text="💳 Вывод от 25 ⭐",
                 callback_data="withdraw"
             ),
         ],
@@ -1052,7 +1026,7 @@ async def cb_referrals(call: types.CallbackQuery):
         f"📊 Ваши рефералы: "
         f"<code>{refs} чел.</code>\n\n"
         "<i>Бонус начисляется сразу после "
-        "подписки друга на все каналы!</i>"
+        "подписки друга на основной канал!</i>"
     )
 
     try:
