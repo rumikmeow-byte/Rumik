@@ -1,0 +1,57 @@
+name: Apply bot settings
+
+on:
+  push:
+    paths:
+      - '.github/workflows/apply-bot-settings.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  update-bot:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply settings
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path('bot.py')
+          s = p.read_text(encoding='utf-8')
+
+          s = s.replace('MIN_WITHDRAW = 15', 'MIN_WITHDRAW = 25')
+          s = s.replace('REF_BONUS = 0.85', 'REF_BONUS = 2')
+
+          old = '''DEFAULT_REQUIRED = [\n    {"chat_id": "@eclipsedlf", "title": "Канал"},\n    {"chat_id": "@GiftsEzzChat", "title": "Чат"},\n]'''
+          new = '''DEFAULT_REQUIRED = [\n    {"chat_id": "@Xoylis", "title": "Основной канал"},\n]'''
+          if old not in s:
+              raise SystemExit('DEFAULT_REQUIRED block not found')
+          s = s.replace(old, new, 1)
+
+          old_menu = '''    # Группы кнопок\n    buttons = [\n        # Группа 1: Канал и Поддержка\n        [\n            InlineKeyboardButton(\n                text="📢 Канал",\n                url="https://t.me/eclipsedlf"\n            ),\n            InlineKeyboardButton(\n                text="💬 Поддержка",\n                url="https://t.me/Eclipsed_consult"\n            ),\n        ],\n        # Группа 2: Пополнение баланса\n        [\n            InlineKeyboardButton(\n                text="⭐ Пополнить баланс",\n                callback_data="topup"\n            ),\n        ],\n        [\n            InlineKeyboardButton(\n                text="💰 Баланс",\n                callback_data="balance"\n            ),\n        ],\n        # Группа 3: Рефералы\n        [\n            InlineKeyboardButton(\n                text="🎁 Рефералы",\n                callback_data="referrals"\n            ),\n        ],\n        # Группа 3: Кейсы, Рулетка и Вывод\n        [\n            InlineKeyboardButton(\n                text="🎁 Кейсы",\n                callback_data="cases"\n            ),\n            InlineKeyboardButton(\n                text="🎰 Рулетка",\n                callback_data="roulette"\n            ),\n            InlineKeyboardButton(\n                text="💳 Вывод",\n                callback_data="withdraw"\n            ),\n        ],\n    ]'''
+          new_menu = '''    # Основное меню: только Рефералы, Баланс и Вывод\n    buttons = [\n        [\n            InlineKeyboardButton(\n                text="🎁 Рефералы",\n                callback_data="referrals"\n            ),\n        ],\n        [\n            InlineKeyboardButton(\n                text="💰 Баланс",\n                callback_data="balance"\n            ),\n        ],\n        [\n            InlineKeyboardButton(\n                text="💳 Вывод от 25 ⭐",\n                callback_data="withdraw"\n            ),\n        ],\n    ]'''
+          if old_menu not in s:
+              raise SystemExit('main menu block not found')
+          s = s.replace(old_menu, new_menu, 1)
+
+          old_balance = '''async def balance_callback(call: types.CallbackQuery):\n    data = await get_user_data(str(call.from_user.id))'''
+          new_balance = '''async def balance_callback(call: types.CallbackQuery):\n    if not await require_subscription(call):\n        return\n    data = await get_user_data(str(call.from_user.id))'''
+          if old_balance not in s:
+              raise SystemExit('balance handler not found')
+          s = s.replace(old_balance, new_balance, 1)
+
+          # Make the displayed referral bonus text clear and consistent.
+          s = s.replace('подписки друга на все каналы!', 'подписки друга на основной канал!')
+          s = s.replace('(пользователь подписался на все каналы)', '(пользователь подписался на основной канал)')
+
+          p.write_text(s, encoding='utf-8')
+          PY
+      - name: Commit changes
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add bot.py
+          git diff --cached --quiet || git commit -m 'Update bot referral and subscription settings'
+          git push
